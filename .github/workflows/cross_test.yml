@@ -36,15 +36,16 @@ jobs:
       - name: Run cargo check, fmt, clippy
         run: cargo make ci
 
-      - name: Upload coverage to coveralls
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo make tarpaulin_ci
-        env:
-          COVERALLS_TOKEN: ${{ secrets.COVERALLS_TOKEN}}
+      # these no longer work because linking with CC
+      # - name: Upload coverage to coveralls
+      #   if: matrix.os == 'ubuntu-latest'
+      #   run: cargo make tarpaulin_ci
+      #   env:
+      #     COVERALLS_TOKEN: ${{ secrets.COVERALLS_TOKEN}}
 
-      - name: Upload reports to codecov.io
-        uses: codecov/codecov-action@v1
-        if: matrix.os == 'ubuntu-latest'
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
+      # - name: Upload reports to codecov.io
+      #   uses: codecov/codecov-action@v1
+      #   if: matrix.os == 'ubuntu-latest'
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     fail_ci_if_error: true
