@@ -11,7 +11,7 @@ version = "0.1.0"
 clap = "2.33.3"
 mwalib = {git = "https://github.com/MWATelescope/mwalib"}
 # tempfile = "3"
-# cxx = "1.0"
+cxx = "1.0.32"
 libc = "0.2.86"
 
 [dev-dependencies]
@@ -20,5 +20,6 @@ rustfmt = "0.10.0"
 
 [build-dependencies]
 bindgen = "0.57.0"
+cxx-build = "1.0.32"
 # pkg-config = "0.3.19"
 cc = {version = "1.0.67", features = ["parallel"]}
