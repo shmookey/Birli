@@ -1,4 +1,5 @@
 #[cxx::bridge]
+#[allow(dead_code)]
 mod ffi {
 
     unsafe extern "C++" {
@@ -22,10 +23,10 @@ mod ffi {
         ) -> UniquePtr<CxxImageSet>;
 
         // CxxImageSet methods
-        fn Width( self: &CxxImageSet ) -> usize;
-        fn Height( self: &CxxImageSet ) -> usize;
-        fn ImageCount( self: &CxxImageSet ) -> usize;
-        fn HorizontalStride( self: &CxxImageSet ) -> usize;
+        fn Width(self: &CxxImageSet) -> usize;
+        fn Height(self: &CxxImageSet) -> usize;
+        fn ImageCount(self: &CxxImageSet) -> usize;
+        fn HorizontalStride(self: &CxxImageSet) -> usize;
         fn ImageBuffer(self: &CxxImageSet, imageIndex: usize) -> &mut [f32];
     }
 }

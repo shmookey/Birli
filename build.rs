@@ -1,7 +1,6 @@
 extern crate cxx_build;
 
 fn main() {
-
     // Tell cargo to tell rustc to link the aoflagger
     // shared library.
     println!("cargo:rustc-link-lib=aoflagger");
