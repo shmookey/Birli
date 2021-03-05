@@ -8,10 +8,11 @@ mod ffi {
 
         type CxxImageSet;
         type CxxAOFlagger;
-        fn cxx_aoflagger_new() -> UniquePtr<CxxAOFlagger>;
-        fn GetVersion(self: &CxxAOFlagger, major: &mut i16, minor: &mut i16, subMinor: &mut i16);
+        unsafe fn cxx_aoflagger_new() -> UniquePtr<CxxAOFlagger>;
 
-        fn MakeImageSet(
+        // CxxAOFlagger methods
+        fn GetVersion(self: &CxxAOFlagger, major: &mut i16, minor: &mut i16, subMinor: &mut i16);
+        unsafe fn MakeImageSet(
             self: &CxxAOFlagger,
             width: usize,
             height: usize,
@@ -20,6 +21,7 @@ mod ffi {
             widthCapacity: usize,
         ) -> UniquePtr<CxxImageSet>;
 
+        // CxxImageSet methods
         fn Width( self: &CxxImageSet ) -> usize;
         fn Height( self: &CxxImageSet ) -> usize;
         fn ImageCount( self: &CxxImageSet ) -> usize;
@@ -49,8 +51,10 @@ mod tests {
         let mut major: c_short = -1;
         let mut minor: c_short = -1;
         let mut sub_minor: c_short = -1;
-        let aoflagger = cxx_aoflagger_new();
-        aoflagger.GetVersion(&mut major, &mut minor, &mut sub_minor);
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            aoflagger.GetVersion(&mut major, &mut minor, &mut sub_minor);
+        }
         assert!(major != -1);
         assert!(minor != -1);
         assert!(sub_minor != -1);
