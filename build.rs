@@ -26,9 +26,13 @@ fn main() {
     //     .warnings(true)
     //     .flag_if_supported("-std=c++11")
     //     .include("src")
-    //     .include("/usr/local/include")
-    //     .files(FILES)
-    //     .compile("aoflagger_glue.a");
+    //     .include("include")
+    //     .files( &["src/aoflagger_wrapper.cpp", "include/aoflagger_wrapper.h"])
+    //     .compile("aoflagger_wrapper");
+
+    // // println!("cargo:rerun-if-changed=src/lib.rs");
+    // println!("cargo:rerun-if-changed=src/aoflagger_wrapper.cpp");
+    // println!("cargo:rerun-if-changed=include/aoflagger_wrapper.h");
 
     cxx_build::bridge("src/lib.rs")
         .flag_if_supported("-std=c++11")
