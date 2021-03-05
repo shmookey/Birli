@@ -28,10 +28,9 @@ size_t CxxImageSet::HorizontalStride() const {
 	return this->pImpl->HorizontalStride();
 }
 
-// float* CxxImageSet::ImageBuffer(size_t imageIndex) const {
 rust::Slice<float> CxxImageSet::ImageBuffer(size_t imageIndex) const {
-    rust::Slice<float> slice{this->pImpl->ImageBuffer(imageIndex), Width() * Height()};
-    return slice;
+	rust::Slice<float> slice{this->pImpl->ImageBuffer(imageIndex), Width() * Height()};
+	return slice;
 }
 
 CxxAOFlagger::CxxAOFlagger() : pImpl(new AOFlagger()) {

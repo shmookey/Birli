@@ -62,6 +62,7 @@ dependencies = [
   "check",
   "format_check",
   "clippy",
+  "test",
 ]
 
 [tasks.pre_commit]

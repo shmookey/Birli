@@ -1,12 +1,12 @@
 #[cxx::bridge]
 #[allow(dead_code)]
 mod ffi {
-
     unsafe extern "C++" {
         include!("birli/include/cxx_aoflagger.h");
 
         fn aoflagger_GetVersion(major: &mut i16, minor: &mut i16, subMinor: &mut i16);
 
+        // type CxxImageSet = super::ImageSet;
         type CxxImageSet;
         type CxxAOFlagger;
         unsafe fn cxx_aoflagger_new() -> UniquePtr<CxxAOFlagger>;
@@ -27,6 +27,8 @@ mod ffi {
         fn Height(self: &CxxImageSet) -> usize;
         fn ImageCount(self: &CxxImageSet) -> usize;
         fn HorizontalStride(self: &CxxImageSet) -> usize;
+        // TODO: fix this
+        #[allow(clippy::mut_from_ref)]
         fn ImageBuffer(self: &CxxImageSet, imageIndex: usize) -> &mut [f32];
     }
 }
