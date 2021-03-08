@@ -35,8 +35,8 @@ mod ffi {
 #[cfg(test)]
 mod tests {
     use super::ffi::{aoflagger_GetVersion, cxx_aoflagger_new};
-    use std::os::raw::c_short;
     use std::mem::size_of_val;
+    use std::os::raw::c_short;
 
     #[test]
     fn test_mem_layout() {
