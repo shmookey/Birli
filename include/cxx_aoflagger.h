@@ -25,6 +25,7 @@ public:
 CxxAOFlagger();
 void GetVersion(short& major, short& minor, short& subMinor) const;
 unique_ptr<CxxImageSet> MakeImageSet(size_t width, size_t height, size_t count, float initialValue, size_t widthCapacity) const;
+rust::String FindStrategyFile() const;
 private:
 // Opaque pointer to aoflagger implementation
 shared_ptr<AOFlagger> pImpl;

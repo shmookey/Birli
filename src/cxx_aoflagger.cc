@@ -1,6 +1,6 @@
 #include "birli/include/cxx_aoflagger.h"
 #include "birli/src/lib.rs.h"
-#include <aoflagger.h>
+// #include <aoflagger.h>
 
 using namespace std;
 using namespace aoflagger;
@@ -43,6 +43,11 @@ unique_ptr<CxxImageSet> CxxAOFlagger::MakeImageSet(size_t width, size_t height, 
 	return unique_ptr<CxxImageSet>(new CxxImageSet(imageset));
 }
 
+rust::String CxxAOFlagger::FindStrategyFile() const {
+    return this->pImpl->FindStrategyFile(TelescopeId::MWA_TELESCOPE);
+}
+
 unique_ptr<CxxAOFlagger> cxx_aoflagger_new() {
 	return unique_ptr<CxxAOFlagger>(new CxxAOFlagger());
 };
+

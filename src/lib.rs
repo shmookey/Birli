@@ -20,6 +20,7 @@ mod ffi {
             initialValue: f32,
             widthCapacity: usize,
         ) -> UniquePtr<CxxImageSet>;
+        fn FindStrategyFile(self: &CxxAOFlagger) -> String;
 
         // CxxImageSet methods
         fn Width(self: &CxxImageSet) -> usize;
@@ -54,9 +55,9 @@ mod tests {
         unsafe {
             aoflagger_GetVersion(&mut major, &mut minor, &mut sub_minor);
         }
-        assert!(major != -1);
-        assert!(minor != -1);
-        assert!(sub_minor != -1);
+        assert!(major >= 3);
+        assert!(minor >= 0);
+        assert!(sub_minor >= 0);
     }
 
     #[test]
@@ -68,9 +69,9 @@ mod tests {
             let aoflagger = cxx_aoflagger_new();
             aoflagger.GetVersion(&mut major, &mut minor, &mut sub_minor);
         }
-        assert!(major != -1);
-        assert!(minor != -1);
-        assert!(sub_minor != -1);
+        assert!(major >= 3);
+        assert!(minor >= 0);
+        assert!(sub_minor >= 0);
     }
 
     #[test]
@@ -108,6 +109,15 @@ mod tests {
             first_buffer_write[0] = 7 as f32;
             let first_buffer_read = image_set.ImageBuffer(0);
             assert_eq!(first_buffer_read[0], 7 as f32);
+        }
+    }
+
+    #[test]
+    fn test_valid_strategy_file() {
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            let strategy_file = aoflagger.FindStrategyFile();
+            assert!(str::ends_with(&strategy_file, "mwa-default.lua"));
         }
     }
 }
