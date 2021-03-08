@@ -20,11 +20,25 @@ CxxImageSet(ImageSet impl);
 shared_ptr<ImageSet> pImpl;
 };
 
+class CxxFlagMask {
+friend class CxxAOFlagger;
+public:
+size_t Width() const;
+size_t Height() const;
+size_t HorizontalStride() const;
+rust::Slice<uint8_t> Buffer() const;
+private:
+CxxFlagMask();
+CxxFlagMask(FlagMask impl);
+shared_ptr<FlagMask> pImpl;
+};
+
 class CxxAOFlagger {
 public:
 CxxAOFlagger();
 void GetVersion(short& major, short& minor, short& subMinor) const;
 unique_ptr<CxxImageSet> MakeImageSet(size_t width, size_t height, size_t count, float initialValue, size_t widthCapacity) const;
+unique_ptr<CxxFlagMask> MakeFlagMask(size_t width, size_t height, bool initialValue) const;
 rust::String FindStrategyFile() const;
 private:
 // Opaque pointer to aoflagger implementation

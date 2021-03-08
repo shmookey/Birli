@@ -7,8 +7,26 @@ mod ffi {
         fn aoflagger_GetVersion(major: &mut i16, minor: &mut i16, subMinor: &mut i16);
 
         type CxxImageSet;
+        type CxxFlagMask;
         type CxxAOFlagger;
         unsafe fn cxx_aoflagger_new() -> UniquePtr<CxxAOFlagger>;
+
+        // CxxImageSet methods
+        fn Width(self: &CxxImageSet) -> usize;
+        fn Height(self: &CxxImageSet) -> usize;
+        fn ImageCount(self: &CxxImageSet) -> usize;
+        fn HorizontalStride(self: &CxxImageSet) -> usize;
+        // TODO: fix this
+        #[allow(clippy::mut_from_ref)]
+        fn ImageBuffer(self: &CxxImageSet, imageIndex: usize) -> &mut [f32];
+
+        // CxxFlagMask methods
+        fn Width(self: &CxxFlagMask) -> usize;
+        fn Height(self: &CxxFlagMask) -> usize;
+        fn HorizontalStride(self: &CxxFlagMask) -> usize;
+        // TODO: fix this
+        #[allow(clippy::mut_from_ref)]
+        fn Buffer(self: &CxxFlagMask) -> &mut [u8];
 
         // CxxAOFlagger methods
         fn GetVersion(self: &CxxAOFlagger, major: &mut i16, minor: &mut i16, subMinor: &mut i16);
@@ -20,16 +38,13 @@ mod ffi {
             initialValue: f32,
             widthCapacity: usize,
         ) -> UniquePtr<CxxImageSet>;
+        unsafe fn MakeFlagMask(
+            self: &CxxAOFlagger,
+            width: usize,
+            height: usize,
+            initialValue: bool,
+        ) -> UniquePtr<CxxFlagMask>;
         fn FindStrategyFile(self: &CxxAOFlagger) -> String;
-
-        // CxxImageSet methods
-        fn Width(self: &CxxImageSet) -> usize;
-        fn Height(self: &CxxImageSet) -> usize;
-        fn ImageCount(self: &CxxImageSet) -> usize;
-        fn HorizontalStride(self: &CxxImageSet) -> usize;
-        // TODO: fix this
-        #[allow(clippy::mut_from_ref)]
-        fn ImageBuffer(self: &CxxImageSet, imageIndex: usize) -> &mut [f32];
     }
 }
 
@@ -88,8 +103,9 @@ mod tests {
             assert_eq!(image_set.Width(), width);
             assert_eq!(image_set.Height(), height);
             assert_eq!(image_set.ImageCount(), count);
+            assert_eq!(image_set.HorizontalStride(), 8);
             let fist_buffer = image_set.ImageBuffer(0);
-            assert_eq!(fist_buffer[0], 5 as f32);
+            assert_eq!(fist_buffer[0], initial_value);
             // TODO: test for leaks, whether destructing is taking place?
         }
     }
@@ -109,6 +125,38 @@ mod tests {
             first_buffer_write[0] = 7 as f32;
             let first_buffer_read = image_set.ImageBuffer(0);
             assert_eq!(first_buffer_read[0], 7 as f32);
+        }
+    }
+
+    #[test]
+    fn test_valid_flag_mask_init() {
+        let width = 21 as usize;
+        let height = 22 as usize;
+        let initial_value = false;
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            let flag_mask = aoflagger.MakeFlagMask(width, height, initial_value);
+            assert_eq!(flag_mask.Width(), width);
+            assert_eq!(flag_mask.Height(), height);
+            assert_eq!(flag_mask.HorizontalStride(), 24);
+            let buffer = flag_mask.Buffer();
+            assert_eq!(buffer[0], 0 as u8);
+            // TODO: test for leaks, whether destructing is taking place?
+        }
+    }
+
+    #[test]
+    fn test_valid_flag_mask_rw() {
+        let width = 21 as usize;
+        let height = 22 as usize;
+        let initial_value = false;
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            let flag_mask = aoflagger.MakeFlagMask(width, height, initial_value);
+            let buffer_write = flag_mask.Buffer();
+            buffer_write[0] = 4 as u8;
+            let buffer_read = flag_mask.Buffer();
+            assert_eq!(buffer_read[0], 4 as u8);
         }
     }
 
