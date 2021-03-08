@@ -46,10 +46,3 @@ unique_ptr<CxxImageSet> CxxAOFlagger::MakeImageSet(size_t width, size_t height, 
 unique_ptr<CxxAOFlagger> cxx_aoflagger_new() {
 	return unique_ptr<CxxAOFlagger>(new CxxAOFlagger());
 };
-
-
-// This is required because the compiler inlines it by default.
-// const ImageSet cxx_aoflagger_MakeImageSet(size_t width, size_t height, size_t count)
-// {
-// 	return aoflaggerGlbl->MakeImageSet(width, height, count);
-// }

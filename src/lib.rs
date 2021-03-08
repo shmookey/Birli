@@ -6,7 +6,6 @@ mod ffi {
 
         fn aoflagger_GetVersion(major: &mut i16, minor: &mut i16, subMinor: &mut i16);
 
-        // type CxxImageSet = super::ImageSet;
         type CxxImageSet;
         type CxxAOFlagger;
         unsafe fn cxx_aoflagger_new() -> UniquePtr<CxxAOFlagger>;
@@ -37,13 +36,24 @@ mod ffi {
 mod tests {
     use super::ffi::{aoflagger_GetVersion, cxx_aoflagger_new};
     use std::os::raw::c_short;
+    use std::mem::size_of_val;
+
+    #[test]
+    fn test_mem_layout() {
+        let usize_test: usize = 0;
+        assert_eq!(size_of_val(&usize_test), 8);
+    }
 
     #[test]
     fn test_valid_aoflagger_version() {
         let mut major: c_short = -1;
         let mut minor: c_short = -1;
         let mut sub_minor: c_short = -1;
-        aoflagger_GetVersion(&mut major, &mut minor, &mut sub_minor);
+
+        #[allow(unused_unsafe)]
+        unsafe {
+            aoflagger_GetVersion(&mut major, &mut minor, &mut sub_minor);
+        }
         assert!(major != -1);
         assert!(minor != -1);
         assert!(sub_minor != -1);
@@ -79,7 +89,7 @@ mod tests {
             assert_eq!(image_set.ImageCount(), count);
             let fist_buffer = image_set.ImageBuffer(0);
             assert_eq!(fist_buffer[0], 5 as f32);
-            // aoflagger_ImageSet_ImageSet_destructor(&mut image_set);
+            // TODO: test for leaks, whether destructing is taking place?
         }
     }
 

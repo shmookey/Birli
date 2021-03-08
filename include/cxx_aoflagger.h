@@ -32,6 +32,5 @@ shared_ptr<AOFlagger> pImpl;
 
 void aoflagger_GetVersion(short& major, short& minor, short& subMinor);
 unique_ptr<CxxAOFlagger> cxx_aoflagger_new();
-// void cxx_aoflagger_GetVersion(CxxAOFlagger& self, short& major, short& minor, short& subMinor);
-// static ImageSet cxx_aoflagger_AOFlagger_MakeImageSet(size_t width, size_t height, size_t count);
+
 
