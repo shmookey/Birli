@@ -8,6 +8,7 @@ using namespace aoflagger;
 
 class CxxImageSet {
 friend class CxxAOFlagger;
+friend class CxxStrategy;
 public:
 size_t Width() const;
 size_t Height() const;
@@ -22,6 +23,7 @@ shared_ptr<ImageSet> pImpl;
 
 class CxxFlagMask {
 friend class CxxAOFlagger;
+friend class CxxStrategy;
 public:
 size_t Width() const;
 size_t Height() const;
@@ -33,12 +35,22 @@ CxxFlagMask(FlagMask impl);
 shared_ptr<FlagMask> pImpl;
 };
 
+class CxxStrategy {
+friend class CxxAOFlagger;
+public:
+// unique_ptr<CxxFlagMask> Run(const CxxImageSet& input, const CxxFlagMask& existingFlags);
+private:
+CxxStrategy(Strategy* impl);
+Strategy impl;
+};
+
 class CxxAOFlagger {
 public:
 CxxAOFlagger();
 void GetVersion(short& major, short& minor, short& subMinor) const;
 unique_ptr<CxxImageSet> MakeImageSet(size_t width, size_t height, size_t count, float initialValue, size_t widthCapacity) const;
 unique_ptr<CxxFlagMask> MakeFlagMask(size_t width, size_t height, bool initialValue) const;
+unique_ptr<CxxStrategy> LoadStrategyFile(const rust::String& filename) const;
 rust::String FindStrategyFile() const;
 private:
 // Opaque pointer to aoflagger implementation

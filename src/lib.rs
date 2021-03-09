@@ -1,6 +1,18 @@
+// mod bindings;
+// use bindings::aoflagger_Strategy;
+
+// use cxx::{type_id, ExternType};
+// use cxx::private::UniquePtrTarget;
+
+// unsafe impl ExternType for aoflagger_Strategy {
+//     type Id = type_id!("aoflagger_Strategy");
+//     type Kind = cxx::kind::Opaque;
+// }
+
 #[cxx::bridge]
 #[allow(dead_code)]
 mod ffi {
+
     unsafe extern "C++" {
         include!("birli/include/cxx_aoflagger.h");
 
@@ -9,6 +21,8 @@ mod ffi {
         type CxxImageSet;
         type CxxFlagMask;
         type CxxAOFlagger;
+        // type CxxStrategy = crate::bindings::aoflagger_Strategy;
+        type CxxStrategy;
         unsafe fn cxx_aoflagger_new() -> UniquePtr<CxxAOFlagger>;
 
         // CxxImageSet methods
@@ -45,6 +59,15 @@ mod ffi {
             initialValue: bool,
         ) -> UniquePtr<CxxFlagMask>;
         fn FindStrategyFile(self: &CxxAOFlagger) -> String;
+        #[allow(clippy::ptr_arg)]
+        fn LoadStrategyFile(self: &CxxAOFlagger, filename: &String) -> UniquePtr<CxxStrategy>;
+
+        // CxxStrategy methods
+        // fn Run(
+        //     self: &mut CxxStrategy,
+        //     input: &CxxImageSet,
+        //     existingFlags: &CxxFlagMask
+        // ) -> UniquePtr<CxxFlagMask>;
     }
 }
 
@@ -161,11 +184,37 @@ mod tests {
     }
 
     #[test]
-    fn test_valid_strategy_file() {
+    fn test_find_strategy_file() {
         unsafe {
             let aoflagger = cxx_aoflagger_new();
             let strategy_file = aoflagger.FindStrategyFile();
             assert!(str::ends_with(&strategy_file, "mwa-default.lua"));
         }
     }
+
+    #[test]
+    fn test_load_strategy_file() {
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            let strategy_file = aoflagger.FindStrategyFile();
+            let strategy = aoflagger.LoadStrategyFile(&strategy_file);
+            assert!(size_of_val(&strategy) > 0);
+        }
+    }
+
+    // #[test]
+    // fn test_strategy_run() {
+    //     let width = 2 as usize;
+    //     let height = 3 as usize;
+    //     let count = 4 as usize;
+    //     let initial_value = 5 as f32;
+    //     let width_capacity = 6 as usize;
+    //     unsafe {
+    //         let aoflagger = cxx_aoflagger_new();
+    //         let strategy = aoflagger.LoadStrategyFile(&aoflagger.FindStrategyFile());
+    //         let image_set =
+    //             aoflagger.MakeImageSet(width, height, count, initial_value, width_capacity);
+    //         // let flag_mask = strategy.Run(&image_set, null());
+    //     }
+    // }
 }
