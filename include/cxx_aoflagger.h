@@ -38,10 +38,11 @@ shared_ptr<FlagMask> pImpl;
 class CxxStrategy {
 friend class CxxAOFlagger;
 public:
-// unique_ptr<CxxFlagMask> Run(const CxxImageSet& input, const CxxFlagMask& existingFlags);
+unique_ptr<CxxFlagMask> Run(const CxxImageSet& input) const;
+unique_ptr<CxxFlagMask> RunExisting(const CxxImageSet& input, const CxxFlagMask& existingFlags) const;
 private:
 CxxStrategy(Strategy* impl);
-Strategy impl;
+mutable Strategy impl;
 };
 
 class CxxAOFlagger {

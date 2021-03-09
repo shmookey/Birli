@@ -1,14 +1,3 @@
-// mod bindings;
-// use bindings::aoflagger_Strategy;
-
-// use cxx::{type_id, ExternType};
-// use cxx::private::UniquePtrTarget;
-
-// unsafe impl ExternType for aoflagger_Strategy {
-//     type Id = type_id!("aoflagger_Strategy");
-//     type Kind = cxx::kind::Opaque;
-// }
-
 #[cxx::bridge]
 #[allow(dead_code)]
 mod ffi {
@@ -63,11 +52,12 @@ mod ffi {
         fn LoadStrategyFile(self: &CxxAOFlagger, filename: &String) -> UniquePtr<CxxStrategy>;
 
         // CxxStrategy methods
-        // fn Run(
-        //     self: &mut CxxStrategy,
-        //     input: &CxxImageSet,
-        //     existingFlags: &CxxFlagMask
-        // ) -> UniquePtr<CxxFlagMask>;
+        fn Run(self: &CxxStrategy, input: &CxxImageSet) -> UniquePtr<CxxFlagMask>;
+        fn RunExisting(
+            self: &CxxStrategy,
+            input: &CxxImageSet,
+            existingFlags: &CxxFlagMask,
+        ) -> UniquePtr<CxxFlagMask>;
     }
 }
 
@@ -198,23 +188,68 @@ mod tests {
             let aoflagger = cxx_aoflagger_new();
             let strategy_file = aoflagger.FindStrategyFile();
             let strategy = aoflagger.LoadStrategyFile(&strategy_file);
-            assert!(size_of_val(&strategy) > 0);
+            assert_eq!(size_of_val(&strategy), 8);
         }
     }
 
-    // #[test]
-    // fn test_strategy_run() {
-    //     let width = 2 as usize;
-    //     let height = 3 as usize;
-    //     let count = 4 as usize;
-    //     let initial_value = 5 as f32;
-    //     let width_capacity = 6 as usize;
-    //     unsafe {
-    //         let aoflagger = cxx_aoflagger_new();
-    //         let strategy = aoflagger.LoadStrategyFile(&aoflagger.FindStrategyFile());
-    //         let image_set =
-    //             aoflagger.MakeImageSet(width, height, count, initial_value, width_capacity);
-    //         // let flag_mask = strategy.Run(&image_set, null());
-    //     }
-    // }
+    #[test]
+    fn test_strategy_run() {
+        let width = 21 as usize;
+        let height = 22 as usize;
+        let count = 4 as usize;
+        let initial_value = 5 as f32;
+        let width_capacity = 6 as usize;
+        let exp_flag_buffer: &[u8] = &[
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            let strategy = aoflagger.LoadStrategyFile(&aoflagger.FindStrategyFile());
+            let image_set =
+                aoflagger.MakeImageSet(width, height, count, initial_value, width_capacity);
+            let flag_mask = strategy.Run(&image_set);
+            let flag_buffer = flag_mask.Buffer();
+            assert_eq!(size_of_val(&flag_buffer), 16);
+            assert_eq!(&flag_buffer, &exp_flag_buffer);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn test_strategy_run_existing() {
+        let width = 21 as usize;
+        let height = 22 as usize;
+        let count = 4 as usize;
+        let initial_value = 5 as f32;
+        let width_capacity = 6 as usize;
+        let exp_flag_buffer: &[u8] = &[
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        unsafe {
+            let aoflagger = cxx_aoflagger_new();
+            let strategy = aoflagger.LoadStrategyFile(&aoflagger.FindStrategyFile());
+            let image_set =
+                aoflagger.MakeImageSet(width, height, count, initial_value, width_capacity);
+            let existing_flag_mask = aoflagger.MakeFlagMask(width, height, false);
+            let existing_flag_buffer = existing_flag_mask.Buffer();
+            // existing_flag_buffer[0..8] = &[1; 8];
+            for (i, flag) in (vec![1; width]).iter().enumerate() {
+                existing_flag_buffer[i] = *flag;
+            }
+            assert_eq!(
+                existing_flag_mask.Buffer(),
+                &[
+                    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0
+                ]
+            );
+            let flag_mask = strategy.RunExisting(&image_set, &existing_flag_mask);
+            let flag_buffer = flag_mask.Buffer();
+            assert_eq!(size_of_val(&flag_buffer), 16);
+            assert_eq!(&flag_buffer, &exp_flag_buffer);
+        }
+    }
 }

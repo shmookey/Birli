@@ -1,6 +1,5 @@
 #include "birli/include/cxx_aoflagger.h"
 #include "birli/src/lib.rs.h"
-// #include <aoflagger.h>
 
 using namespace std;
 using namespace aoflagger;
@@ -53,13 +52,14 @@ rust::Slice<uint8_t> CxxFlagMask::Buffer() const {
 CxxStrategy::CxxStrategy(Strategy* impl) {
     this->impl = std::move(*impl);
 }
-// unique_ptr<CxxFlagMask> CxxStrategy::Run(const CxxImageSet& input, const CxxFlagMask& existingFlags) {
-//     // const ImageSet& aoInput = const_cast<ImageSet*>(input.pImpl);
-//     // const FlagMask& aoExistingFlags = const_cast<ImageSet*>(existingFlags.pImpl);
-// 	// FlagMask flagmask = this->impl.Run(aoInput, aoExistingFlags);
-// 	FlagMask flagmask = this->impl.Run(*(input.pImpl), *(existingFlags.pImpl));
-// 	return unique_ptr<CxxFlagMask>(new CxxFlagMask(flagmask));
-// }
+unique_ptr<CxxFlagMask> CxxStrategy::Run(const CxxImageSet& input) const {
+	FlagMask flagmask = this->impl.Run(*(input.pImpl));
+	return unique_ptr<CxxFlagMask>(new CxxFlagMask(flagmask));
+}
+unique_ptr<CxxFlagMask> CxxStrategy::RunExisting(const CxxImageSet& input, const CxxFlagMask& existingFlags) const {
+	FlagMask flagmask = this->impl.Run(*(input.pImpl), *(existingFlags.pImpl));
+	return unique_ptr<CxxFlagMask>(new CxxFlagMask(flagmask));
+}
 
 CxxAOFlagger::CxxAOFlagger() : pImpl(new AOFlagger()) {
 }
