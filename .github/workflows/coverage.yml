@@ -6,6 +6,7 @@ name: Generate Coverage report
 
 jobs:
   coverage:
+    runs-on: ubuntu-latest
     container: mwatelescope/aoflagger:3.0_portable
     steps:
       - name: Checkout sources
@@ -29,10 +30,9 @@ jobs:
           && cargo install --force cargo-make cargo-binutils
 
       - name: Generate test lcov coverage into coverage/ dir
-        with:
-          env:
-            RUSTFLAGS: -Zinstrument-coverage
-            LLVM_PROFILE_FILE: json5format-%m.profraw
+        env:
+          RUSTFLAGS: -Zinstrument-coverage
+          LLVM_PROFILE_FILE: json5format-%m.profraw
         run: |
           mkdir -p coverage
           cargo test --tests
@@ -42,15 +42,8 @@ jobs:
             --ignore-filename-regex='(/.cargo/registry|/rustc|test.rs$)' \
             --instr-profile=json5format.profdata \
           $( \
-              for file in \
-                      $( \
-                          cargo test --tests --no-run --message-format=json \
-                                  | jq -r "select(.profile.test == true) | .filenames[]" \
-                                  | grep -v dSYM - \
-                  ); \
-                do \
-                    printf "-object %s " $file; \
-                done \
+              cargo test --tests --no-run --message-format=json \
+                | jq -r $'select(.profile.test == true) | .filenames[] | select(endswith(".dSYM") | not) | [.] | join(" -object ")'
           ) > coverage/coverage.lcov
 
       - name: Upload reports to codecov.io (Bash)
