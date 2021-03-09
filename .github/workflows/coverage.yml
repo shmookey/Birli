@@ -41,10 +41,13 @@ jobs:
           cargo cov -- export --format=lcov \
             --ignore-filename-regex='(/.cargo/registry|/rustc|test.rs$)' \
             --instr-profile=json5format.profdata \
-          $( \
-              cargo test --tests --no-run --message-format=json \
-                | jq -r $'select(.profile.test == true) | .filenames[] | select(endswith(".dSYM") | not) | [.] | join(" -object ")'
-          ) > coverage/coverage.lcov
+            $(cargo test --tests --no-run --message-format=json | jq -r '
+              select(.profile.test == true)
+              | .filenames[]
+              | select(endswith(".dSYM")|not)
+              | " -object \(.)"
+            ') \
+            > coverage/coverage.lcov
 
       - name: Upload reports to codecov.io (Bash)
         run: bash <(curl -s https://codecov.io/bash)
