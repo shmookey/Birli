@@ -27,7 +27,7 @@ size_t CxxImageSet::HorizontalStride() const {
 	return this->pImpl->HorizontalStride();
 }
 rust::Slice<float> CxxImageSet::ImageBuffer(size_t imageIndex) const {
-	rust::Slice<float> slice{this->pImpl->ImageBuffer(imageIndex), Width() * Height()};
+	rust::Slice<float> slice{this->pImpl->ImageBuffer(imageIndex), Width() * HorizontalStride()};
 	return slice;
 }
 
@@ -45,7 +45,7 @@ size_t CxxFlagMask::HorizontalStride() const {
 	return this->pImpl->HorizontalStride();
 }
 rust::Slice<uint8_t> CxxFlagMask::Buffer() const {
-	rust::Slice<uint8_t> slice{(uint8_t *)(this->pImpl->Buffer()), Width() * Height() / 8};
+	rust::Slice<uint8_t> slice{(uint8_t *)(this->pImpl->Buffer()), Width() * HorizontalStride()};
 	return slice;
 }
 
