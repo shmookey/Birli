@@ -27,7 +27,7 @@ size_t CxxImageSet::HorizontalStride() const {
 	return this->pImpl->HorizontalStride();
 }
 rust::Slice<float> CxxImageSet::ImageBuffer(size_t imageIndex) const {
-	rust::Slice<float> slice{this->pImpl->ImageBuffer(imageIndex), Width() * HorizontalStride()};
+	rust::Slice<float> slice{this->pImpl->ImageBuffer(imageIndex), Height() * HorizontalStride()};
 	return slice;
 }
 
@@ -44,8 +44,8 @@ size_t CxxFlagMask::Height() const {
 size_t CxxFlagMask::HorizontalStride() const {
 	return this->pImpl->HorizontalStride();
 }
-rust::Slice<uint8_t> CxxFlagMask::Buffer() const {
-	rust::Slice<uint8_t> slice{(uint8_t *)(this->pImpl->Buffer()), Width() * HorizontalStride()};
+rust::Slice<bool> CxxFlagMask::Buffer() const {
+	rust::Slice<bool> slice{(bool *)(this->pImpl->Buffer()), Height() * HorizontalStride()};
 	return slice;
 }
 
@@ -74,7 +74,10 @@ unique_ptr<CxxFlagMask> CxxAOFlagger::MakeFlagMask(size_t width, size_t height, 
 	FlagMask flagmask = this->pImpl->MakeFlagMask(width, height, initialValue);
 	return unique_ptr<CxxFlagMask>(new CxxFlagMask(flagmask));
 }
-rust::String CxxAOFlagger::FindStrategyFile() const {
+rust::String CxxAOFlagger::FindStrategyFileGeneric(const rust::String& scenario) const {
+	return this->pImpl->FindStrategyFile(TelescopeId::GENERIC_TELESCOPE, std::string(scenario));
+}
+rust::String CxxAOFlagger::FindStrategyFileMWA() const {
 	return this->pImpl->FindStrategyFile(TelescopeId::MWA_TELESCOPE);
 }
 unique_ptr<CxxStrategy> CxxAOFlagger::LoadStrategyFile(const rust::String& filename) const {
