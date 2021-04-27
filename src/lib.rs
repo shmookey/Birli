@@ -1,12 +1,12 @@
 mod cxx_aoflagger;
 use cxx::UniquePtr;
-use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet, CxxStrategy};
+use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
 
 pub use cxx_aoflagger::ffi::cxx_aoflagger_new;
 use mwalib::CorrelatorContext;
+use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::os::raw::c_short;
-// use rayon::prelude::*;
 
 mod flag_io;
 pub use flag_io::FlagFileSet;
@@ -27,7 +27,7 @@ pub fn get_aoflagger_version_string() -> String {
 
 pub fn context_to_baseline_imgsets(
     aoflagger: &CxxAOFlagger,
-    context: &mut CorrelatorContext,
+    context: &CorrelatorContext,
 ) -> BTreeMap<usize, UniquePtr<CxxImageSet>> {
     let coarse_chan_arr = context.coarse_chans.clone();
     let timestep_arr = context.timesteps.clone();
@@ -44,11 +44,10 @@ pub fn context_to_baseline_imgsets(
         .baselines
         .iter()
         .enumerate()
-        .map(|(baseline_idx, _)| unsafe {
-            (
-                baseline_idx,
-                aoflagger.MakeImageSet(width, height, 8, 0 as f32, width),
-            )
+        .map(|(baseline_idx, _)| {
+            (baseline_idx, unsafe {
+                aoflagger.MakeImageSet(width, height, 8, 0 as f32, width)
+            })
         })
         .collect();
 
@@ -57,6 +56,8 @@ pub fn context_to_baseline_imgsets(
             let img_buf = context
                 .read_by_baseline(timestep_idx, coarse_chan_idx)
                 .unwrap();
+
+            // TODO: this could be more optimal.
             for (baseline_idx, baseline_chunk) in img_buf.chunks(floats_per_baseline).enumerate() {
                 for (fine_chan_idx, fine_chan_chunk) in
                     baseline_chunk.chunks(floats_per_finechan).enumerate()
@@ -79,14 +80,21 @@ pub fn context_to_baseline_imgsets(
 }
 
 pub fn flag_imgsets(
-    strategy: UniquePtr<CxxStrategy>,
+    aoflagger: &CxxAOFlagger,
+    strategy_filename: &String,
     baseline_imgsets: BTreeMap<usize, UniquePtr<CxxImageSet>>,
 ) -> BTreeMap<usize, UniquePtr<CxxFlagMask>> {
     // TODO: figure out how to parallelize with Rayon, into_iter(). You'll probably need to convert between UniquePtr and Box
 
     return baseline_imgsets
-        .iter()
-        .map(|(&baseline, imgset)| (baseline, strategy.Run(&imgset)))
+        .into_par_iter()
+        // .into_iter()
+        .map(|(baseline, imgset)| {
+            (
+                baseline,
+                aoflagger.LoadStrategyFile(&strategy_filename).Run(&imgset),
+            )
+        })
         .collect();
 }
 
@@ -339,8 +347,7 @@ mod tests {
             baseline_imgsets.insert(1, imgset1);
 
             let strategy_file_minimal = aoflagger.FindStrategyFileGeneric(&String::from("minimal"));
-            let strategy_minimal = aoflagger.LoadStrategyFile(&strategy_file_minimal);
-            flag_imgsets(strategy_minimal, baseline_imgsets)
+            flag_imgsets(&aoflagger, &strategy_file_minimal, baseline_imgsets)
         };
 
         let flagmask0 = baseline_flagmasks.get(&0).unwrap();

@@ -65,6 +65,16 @@ pub mod ffi {
     }
 }
 
+// TODO:
+// The C++ implementation of CxxAOFlagger, CxxImageSet and CxxFlagMask are thread safe.
+// https://cxx.rs/extern-c++.html
+unsafe impl Send for ffi::CxxImageSet {}
+unsafe impl Sync for ffi::CxxImageSet {}
+unsafe impl Send for ffi::CxxFlagMask {}
+unsafe impl Sync for ffi::CxxFlagMask {}
+unsafe impl Send for ffi::CxxAOFlagger {}
+unsafe impl Sync for ffi::CxxAOFlagger {}
+
 #[cfg(test)]
 mod tests {
     use super::ffi::{aoflagger_GetVersion, cxx_aoflagger_new};
