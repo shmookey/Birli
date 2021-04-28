@@ -3,6 +3,7 @@ use cxx::UniquePtr;
 use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
 
 pub use cxx_aoflagger::ffi::cxx_aoflagger_new;
+use log::debug;
 use mwalib::CorrelatorContext;
 use rayon::prelude::*;
 use std::collections::BTreeMap;
@@ -29,6 +30,7 @@ pub fn context_to_baseline_imgsets(
     aoflagger: &CxxAOFlagger,
     context: &CorrelatorContext,
 ) -> BTreeMap<usize, UniquePtr<CxxImageSet>> {
+    debug!("start context_to_baseline_imgsets");
     let coarse_chan_arr = context.coarse_chans.clone();
     let timestep_arr = context.timesteps.clone();
 
@@ -75,7 +77,7 @@ pub fn context_to_baseline_imgsets(
             }
         }
     }
-
+    debug!("end context_to_baseline_imgsets");
     return baseline_imgsets;
 }
 
@@ -85,8 +87,8 @@ pub fn flag_imgsets(
     baseline_imgsets: BTreeMap<usize, UniquePtr<CxxImageSet>>,
 ) -> BTreeMap<usize, UniquePtr<CxxFlagMask>> {
     // TODO: figure out how to parallelize with Rayon, into_iter(). You'll probably need to convert between UniquePtr and Box
-
-    return baseline_imgsets
+    debug!("start flag_imgsets");
+    let baseline_flagmasks = baseline_imgsets
         .into_par_iter()
         // .into_iter()
         .map(|(baseline, imgset)| {
@@ -96,6 +98,8 @@ pub fn flag_imgsets(
             )
         })
         .collect();
+    debug!("end flag_imgsets");
+    return baseline_flagmasks;
 }
 
 pub fn write_flags(
@@ -104,10 +108,12 @@ pub fn write_flags(
     filename_template: &str,
     gpubox_ids: &Vec<usize>,
 ) {
+    debug!("start write_flags");
     let mut flag_file_set = FlagFileSet::new(context, filename_template, &gpubox_ids).unwrap();
     flag_file_set
         .write_baseline_flagmasks(&context, baseline_flagmasks)
         .unwrap();
+    debug!("end write_flags");
 }
 
 #[cfg(test)]
