@@ -126,8 +126,10 @@ fn bench_flag_imgsets_mwax_half_1247842824(c: &mut Criterion) {
 }
 
 criterion_group!(
-    benches,
-    bench_context_to_baseline_imgsets_mwax_half_1247842824,
-    bench_flag_imgsets_mwax_half_1247842824
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets =
+        bench_context_to_baseline_imgsets_mwax_half_1247842824,
+        bench_flag_imgsets_mwax_half_1247842824
 );
 criterion_main!(benches);
