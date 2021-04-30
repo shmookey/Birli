@@ -74,7 +74,7 @@ pub fn context_to_baseline_imgsets(
     // Error channel
     // let (tx_err, rx_err) = bounded(1);
 
-    let n_workers = coarse_chan_idxs.len();
+    let n_workers = 1;
 
     thread::scope(|scope| {
         // Queue up coarse channels to do
@@ -116,27 +116,26 @@ pub fn context_to_baseline_imgsets(
         drop(tx_coarse_chan_idx);
         drop(tx_img);
 
-        // create a single consumer thread
-        scope.spawn(|_| {
-            for (coarse_chan_idx, timestep_idx, img_buf) in rx_img.iter() {
-                for (baseline_idx, baseline_chunk) in
-                    img_buf.chunks(floats_per_baseline).enumerate()
+        // consume rx_img
+        for (coarse_chan_idx, timestep_idx, img_buf) in rx_img.iter() {
+            trace!("consuming coarse_chan {} timestep {}", coarse_chan_idx, timestep_idx);
+            for (baseline_idx, baseline_chunk) in
+                img_buf.chunks(floats_per_baseline).enumerate()
+            {
+                for (fine_chan_idx, fine_chan_chunk) in
+                    baseline_chunk.chunks(floats_per_finechan).enumerate()
                 {
-                    for (fine_chan_idx, fine_chan_chunk) in
-                        baseline_chunk.chunks(floats_per_finechan).enumerate()
-                    {
-                        let x = timestep_idx;
-                        let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
+                    let x = timestep_idx;
+                    let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
 
-                        let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
-                        for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
-                            imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] =
-                                *float_val
-                        }
+                    let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
+                    for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
+                        imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] =
+                            *float_val
                     }
                 }
             }
-        });
+        };
     })
     .unwrap();
 
