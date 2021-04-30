@@ -135,7 +135,7 @@ fn bench_flag_imgsets_mwax_half_1247842824(c: &mut Criterion) {
 
 criterion_group!(
     name = benches;
-    config = Criterion::default().sample_size(10);
+    config = Criterion::default().sample_size(3);
     targets =
         bench_context_to_baseline_imgsets_mwax_half_1247842824,
         bench_context_to_baseline_imgsets_ord_half_1196175296,
