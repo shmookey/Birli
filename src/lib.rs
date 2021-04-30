@@ -3,7 +3,7 @@ use cxx::UniquePtr;
 use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
 
 pub use cxx_aoflagger::ffi::cxx_aoflagger_new;
-use log::debug;
+use log::trace;
 use mwalib::CorrelatorContext;
 use rayon::prelude::*;
 use std::collections::BTreeMap;
@@ -30,14 +30,24 @@ pub fn context_to_baseline_imgsets(
     aoflagger: &CxxAOFlagger,
     context: &CorrelatorContext,
 ) -> BTreeMap<usize, UniquePtr<CxxImageSet>> {
-    debug!("start context_to_baseline_imgsets");
-    let coarse_chan_arr = context.coarse_chans.clone();
-    let timestep_arr = context.timesteps.clone();
+    trace!("start context_to_baseline_imgsets");
+    let coarse_chan_idxs: Vec<usize> = context
+        .coarse_chans
+        .iter()
+        .enumerate()
+        .map(|(idx, _)| idx)
+        .collect();
+    let timestep_idxs: Vec<usize> = context
+        .timesteps
+        .iter()
+        .enumerate()
+        .map(|(idx, _)| idx)
+        .collect();
 
+    let fine_chans_per_coarse = context.metafits_context.num_corr_fine_chans_per_coarse;
     let floats_per_finechan = context.metafits_context.num_visibility_pols * 2;
-    let floats_per_baseline =
-        context.metafits_context.num_corr_fine_chans_per_coarse * floats_per_finechan;
-    let height = context.num_coarse_chans * context.metafits_context.num_corr_fine_chans_per_coarse;
+    let floats_per_baseline = fine_chans_per_coarse * floats_per_finechan;
+    let height = context.num_coarse_chans * fine_chans_per_coarse;
     let width = context.num_timesteps;
     let img_stride = (((width - 1) / 8) + 1) * 8;
 
@@ -53,8 +63,13 @@ pub fn context_to_baseline_imgsets(
         })
         .collect();
 
-    for (coarse_chan_idx, _) in coarse_chan_arr.iter().enumerate() {
-        for (timestep_idx, _) in timestep_arr.iter().enumerate() {
+    // coarse_chan_idxs
+    //     .par_iter()
+    //     .zip(timestep_idxs.par_iter())
+    //     .for_each(|(&coarse_chan_idx, &timestep_idx)| {
+    // });
+    for &coarse_chan_idx in coarse_chan_idxs.iter() {
+        for &timestep_idx in timestep_idxs.iter() {
             let img_buf = context
                 .read_by_baseline(timestep_idx, coarse_chan_idx)
                 .unwrap();
@@ -65,9 +80,7 @@ pub fn context_to_baseline_imgsets(
                     baseline_chunk.chunks(floats_per_finechan).enumerate()
                 {
                     let x = timestep_idx;
-                    let y = context.metafits_context.num_corr_fine_chans_per_coarse
-                        * coarse_chan_idx
-                        + fine_chan_idx;
+                    let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
 
                     let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
                     for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
@@ -77,7 +90,7 @@ pub fn context_to_baseline_imgsets(
             }
         }
     }
-    debug!("end context_to_baseline_imgsets");
+    trace!("end context_to_baseline_imgsets");
     return baseline_imgsets;
 }
 
@@ -87,18 +100,17 @@ pub fn flag_imgsets(
     baseline_imgsets: BTreeMap<usize, UniquePtr<CxxImageSet>>,
 ) -> BTreeMap<usize, UniquePtr<CxxFlagMask>> {
     // TODO: figure out how to parallelize with Rayon, into_iter(). You'll probably need to convert between UniquePtr and Box
-    debug!("start flag_imgsets");
+    trace!("start flag_imgsets");
     let baseline_flagmasks = baseline_imgsets
         .into_par_iter()
-        // .into_iter()
         .map(|(baseline, imgset)| {
             (
                 baseline,
-                aoflagger.LoadStrategyFile(&strategy_filename).Run(&imgset),
+                aoflagger.LoadStrategyFile(strategy_filename).Run(&imgset),
             )
         })
         .collect();
-    debug!("end flag_imgsets");
+    trace!("end flag_imgsets");
     return baseline_flagmasks;
 }
 
@@ -108,12 +120,12 @@ pub fn write_flags(
     filename_template: &str,
     gpubox_ids: &Vec<usize>,
 ) {
-    debug!("start write_flags");
+    trace!("start write_flags");
     let mut flag_file_set = FlagFileSet::new(context, filename_template, &gpubox_ids).unwrap();
     flag_file_set
         .write_baseline_flagmasks(&context, baseline_flagmasks)
         .unwrap();
-    debug!("end write_flags");
+    trace!("end write_flags");
 }
 
 #[cfg(test)]
@@ -457,4 +469,10 @@ mod tests {
             );
         }
     }
+
+    // #[allow(soft_unstable)]
+    // #[bench]
+    // fn bench_context_to_baseline_imgsets(b: &mut Bencher) {
+
+    // }
 }
