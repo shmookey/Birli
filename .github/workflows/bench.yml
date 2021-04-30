@@ -1,0 +1,21 @@
+# Based on https://github.com/actions-rs/meta/blob/master/recipes/quickstart.md
+
+on: [push]
+
+name: Benchmarks
+
+jobs:
+  test:
+    name: Benchmarks
+    runs-on: self-hosted
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Cargo Bench
+        run: cargo bench
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib/
+          BIRLI_TEST_DIR: /data
