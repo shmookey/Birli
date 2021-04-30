@@ -1,9 +1,9 @@
 mod cxx_aoflagger;
-// use crossbeam_channel::{bounded, unbounded};
-use crossbeam_channel::unbounded;
+use crossbeam_channel::{bounded, unbounded};
 use crossbeam_utils::thread;
 use cxx::UniquePtr;
 use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
+use indicatif::{ProgressBar, MultiProgress};
 
 pub use cxx_aoflagger::ffi::cxx_aoflagger_new;
 use log::trace;
@@ -66,26 +66,31 @@ pub fn context_to_baseline_imgsets(
         })
         .collect();
 
+    let num_workers = coarse_chan_idxs.len();
+
     // A queue of coarse channel indices for the producers to work through
     let (tx_coarse_chan_idx, rx_coarse_chan_idx) = unbounded();
     // image buffer communication channel. The producer might send an error on this
     // channel; it's up to the worker to propagate it.
-    let (tx_img, rx_img) = unbounded();
+    let (tx_img, rx_img) = bounded(num_workers);
     // Error channel
     // let (tx_err, rx_err) = bounded(1);
 
-    let n_workers = 1;
-
     thread::scope(|scope| {
+        let multi_progress = MultiProgress::new();
+
+        let mut chan_progress: BTreeMap<usize, ProgressBar> = BTreeMap::new();
         // Queue up coarse channels to do
         for coarse_chan_idx in coarse_chan_idxs {
             tx_coarse_chan_idx.send(coarse_chan_idx).unwrap();
+            let pb = ProgressBar::new(timestep_idxs.len() as u64);
+            chan_progress.insert(coarse_chan_idx, multi_progress.add(pb));
         }
 
         // Create a producer thread for worker
-        for _ in 0..n_workers {
+        for _ in 0..num_workers {
             let (_, rx_coarse_chan_idx_worker) =
-                (tx_coarse_chan_idx.clone(), rx_coarse_chan_idx.clone());
+            (tx_coarse_chan_idx.clone(), rx_coarse_chan_idx.clone());
             let (tx_img_worker, _) = (tx_img.clone(), rx_img.clone());
             let timestep_idxs_worker = timestep_idxs.to_owned();
             scope.spawn(move |_| {
@@ -118,10 +123,12 @@ pub fn context_to_baseline_imgsets(
 
         // consume rx_img
         for (coarse_chan_idx, timestep_idx, img_buf) in rx_img.iter() {
-            trace!("consuming coarse_chan {} timestep {}", coarse_chan_idx, timestep_idx);
-            for (baseline_idx, baseline_chunk) in
-                img_buf.chunks(floats_per_baseline).enumerate()
-            {
+            // trace!(
+            //     "consuming coarse_chan {} timestep {}",
+            //     coarse_chan_idx,
+            //     timestep_idx
+            // );
+            for (baseline_idx, baseline_chunk) in img_buf.chunks(floats_per_baseline).enumerate() {
                 for (fine_chan_idx, fine_chan_chunk) in
                     baseline_chunk.chunks(floats_per_finechan).enumerate()
                 {
@@ -130,12 +137,12 @@ pub fn context_to_baseline_imgsets(
 
                     let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
                     for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
-                        imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] =
-                            *float_val
+                        imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] = *float_val
                     }
                 }
-            }
-        };
+            };
+            chan_progress[&coarse_chan_idx].inc(1);
+        }
     })
     .unwrap();
 
