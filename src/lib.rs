@@ -3,7 +3,7 @@ use crossbeam_channel::{bounded, unbounded};
 use crossbeam_utils::thread;
 use cxx::UniquePtr;
 use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
-use indicatif::{ProgressBar, MultiProgress};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 pub use cxx_aoflagger::ffi::cxx_aoflagger_new;
 use log::trace;
@@ -76,21 +76,36 @@ pub fn context_to_baseline_imgsets(
     // Error channel
     // let (tx_err, rx_err) = bounded(1);
 
-    thread::scope(|scope| {
-        let multi_progress = MultiProgress::new();
+    let multi_progress = MultiProgress::new();
+    let chan_progress: BTreeMap<usize, ProgressBar> = coarse_chan_idxs
+        .iter()
+        .map(|&coarse_chan_idx| {
+            let pb = multi_progress.add(ProgressBar::new(timestep_idxs.len() as u64));
+            (coarse_chan_idx, pb)
+        })
+        .collect();
+    let total_progress = multi_progress.add(ProgressBar::new(
+        (timestep_idxs.len() * coarse_chan_idxs.len()) as u64,
+    ));
+    total_progress.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{msg:15}: [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})",
+            )
+            .progress_chars("#>-"),
+    );
+    total_progress.set_position(0);
 
-        let mut chan_progress: BTreeMap<usize, ProgressBar> = BTreeMap::new();
+    thread::scope(|scope| {
         // Queue up coarse channels to do
         for coarse_chan_idx in coarse_chan_idxs {
             tx_coarse_chan_idx.send(coarse_chan_idx).unwrap();
-            let pb = ProgressBar::new(timestep_idxs.len() as u64);
-            chan_progress.insert(coarse_chan_idx, multi_progress.add(pb));
         }
 
         // Create a producer thread for worker
         for _ in 0..num_workers {
             let (_, rx_coarse_chan_idx_worker) =
-            (tx_coarse_chan_idx.clone(), rx_coarse_chan_idx.clone());
+                (tx_coarse_chan_idx.clone(), rx_coarse_chan_idx.clone());
             let (tx_img_worker, _) = (tx_img.clone(), rx_img.clone());
             let timestep_idxs_worker = timestep_idxs.to_owned();
             scope.spawn(move |_| {
@@ -121,6 +136,10 @@ pub fn context_to_baseline_imgsets(
         drop(tx_coarse_chan_idx);
         drop(tx_img);
 
+        scope.spawn(|_| {
+            multi_progress.join().unwrap();
+        });
+
         // consume rx_img
         for (coarse_chan_idx, timestep_idx, img_buf) in rx_img.iter() {
             // trace!(
@@ -140,9 +159,14 @@ pub fn context_to_baseline_imgsets(
                         imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] = *float_val
                     }
                 }
-            };
+            }
             chan_progress[&coarse_chan_idx].inc(1);
-        }
+            total_progress.inc(1);
+        };
+
+        chan_progress.iter().for_each(|(_, pb)| pb.finish_with_message("done"));
+        total_progress.finish_with_message("done");
+
     })
     .unwrap();
 
