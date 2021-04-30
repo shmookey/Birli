@@ -1,4 +1,7 @@
 mod cxx_aoflagger;
+// use crossbeam_channel::{bounded, unbounded};
+use crossbeam_channel::unbounded;
+use crossbeam_utils::thread;
 use cxx::UniquePtr;
 use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
 
@@ -63,33 +66,84 @@ pub fn context_to_baseline_imgsets(
         })
         .collect();
 
-    // coarse_chan_idxs
-    //     .par_iter()
-    //     .zip(timestep_idxs.par_iter())
-    //     .for_each(|(&coarse_chan_idx, &timestep_idx)| {
-    // });
-    for &coarse_chan_idx in coarse_chan_idxs.iter() {
-        for &timestep_idx in timestep_idxs.iter() {
-            let img_buf = context
-                .read_by_baseline(timestep_idx, coarse_chan_idx)
-                .unwrap();
+    // A queue of coarse channel indices for the producers to work through
+    let (tx_coarse_chan_idx, rx_coarse_chan_idx) = unbounded();
+    // image buffer communication channel. The producer might send an error on this
+    // channel; it's up to the worker to propagate it.
+    let (tx_img, rx_img) = unbounded();
+    // Error channel
+    // let (tx_err, rx_err) = bounded(1);
 
-            // TODO: this could be more optimal.
-            for (baseline_idx, baseline_chunk) in img_buf.chunks(floats_per_baseline).enumerate() {
-                for (fine_chan_idx, fine_chan_chunk) in
-                    baseline_chunk.chunks(floats_per_finechan).enumerate()
+    let n_workers = coarse_chan_idxs.len();
+
+    thread::scope(|scope| {
+        // Queue up coarse channels to do
+        for coarse_chan_idx in coarse_chan_idxs {
+            tx_coarse_chan_idx.send(coarse_chan_idx).unwrap();
+        }
+
+        // Create a producer thread for worker
+        for _ in 0..n_workers {
+            let (_, rx_coarse_chan_idx_worker) =
+                (tx_coarse_chan_idx.clone(), rx_coarse_chan_idx.clone());
+            let (tx_img_worker, _) = (tx_img.clone(), rx_img.clone());
+            let timestep_idxs_worker = timestep_idxs.to_owned();
+            scope.spawn(move |_| {
+                for coarse_chan_idx in rx_coarse_chan_idx_worker.iter() {
+                    trace!(
+                        "[worker {:?}] start coarse channel {}.",
+                        std::thread::current().id(),
+                        coarse_chan_idx
+                    );
+                    for &timestep_idx in timestep_idxs_worker.iter() {
+                        let img_buf = context
+                            .read_by_baseline(timestep_idx, coarse_chan_idx)
+                            .unwrap();
+                        tx_img_worker
+                            .send((coarse_chan_idx, timestep_idx, img_buf))
+                            .unwrap();
+                    }
+                    trace!(
+                        "[worker {:?}] end coarse channel {}.",
+                        std::thread::current().id(),
+                        coarse_chan_idx
+                    );
+                }
+                trace!("[worker {:?}] done!", std::thread::current().id());
+            });
+        }
+
+        drop(tx_coarse_chan_idx);
+        drop(tx_img);
+
+        // create a single consumer thread
+        scope.spawn(|_| {
+            for (coarse_chan_idx, timestep_idx, img_buf) in rx_img.iter() {
+                for (baseline_idx, baseline_chunk) in
+                    img_buf.chunks(floats_per_baseline).enumerate()
                 {
-                    let x = timestep_idx;
-                    let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
+                    for (fine_chan_idx, fine_chan_chunk) in
+                        baseline_chunk.chunks(floats_per_finechan).enumerate()
+                    {
+                        let x = timestep_idx;
+                        let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
 
-                    let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
-                    for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
-                        imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] = *float_val
+                        let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
+                        for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
+                            imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] =
+                                *float_val
+                        }
                     }
                 }
             }
-        }
-    }
+        });
+    })
+    .unwrap();
+
+    // for err_msg in rx_err.iter() {
+    //     return Err(err_msg);
+    // }
+
     trace!("end context_to_baseline_imgsets");
     return baseline_imgsets;
 }
@@ -99,7 +153,6 @@ pub fn flag_imgsets(
     strategy_filename: &String,
     baseline_imgsets: BTreeMap<usize, UniquePtr<CxxImageSet>>,
 ) -> BTreeMap<usize, UniquePtr<CxxFlagMask>> {
-    // TODO: figure out how to parallelize with Rayon, into_iter(). You'll probably need to convert between UniquePtr and Box
     trace!("start flag_imgsets");
     let baseline_flagmasks = baseline_imgsets
         .into_par_iter()
