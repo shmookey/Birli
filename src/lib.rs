@@ -6,7 +6,7 @@ use cxx_aoflagger::ffi::{CxxAOFlagger, CxxFlagMask, CxxImageSet};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 pub use cxx_aoflagger::ffi::cxx_aoflagger_new;
-use log::trace;
+use log::{info, trace};
 use mwalib::CorrelatorContext;
 use rayon::prelude::*;
 use std::collections::BTreeMap;
@@ -33,7 +33,7 @@ pub fn context_to_baseline_imgsets(
     aoflagger: &CxxAOFlagger,
     context: &CorrelatorContext,
 ) -> BTreeMap<usize, UniquePtr<CxxImageSet>> {
-    trace!("start context_to_baseline_imgsets");
+    info!("start context_to_baseline_imgsets");
     let coarse_chan_idxs: Vec<usize> = context
         .coarse_chans
         .iter()
@@ -81,6 +81,13 @@ pub fn context_to_baseline_imgsets(
         .iter()
         .map(|&coarse_chan_idx| {
             let pb = multi_progress.add(ProgressBar::new(timestep_idxs.len() as u64));
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg:16}: [{wide_bar}] {pos:3}/{len:3}")
+                    .progress_chars("#>-"),
+            );
+            pb.set_position(0);
+            pb.set_message(format!("coarse chan {:3}", coarse_chan_idx));
             (coarse_chan_idx, pb)
         })
         .collect();
@@ -89,14 +96,17 @@ pub fn context_to_baseline_imgsets(
     ));
     total_progress.set_style(
         ProgressStyle::default_bar()
-            .template(
-                "{msg:15}: [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})",
-            )
+            .template("{msg:16}: [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
             .progress_chars("#>-"),
     );
     total_progress.set_position(0);
+    total_progress.set_message("loading hdus");
 
     thread::scope(|scope| {
+        scope.spawn(|_| {
+            multi_progress.join().unwrap();
+        });
+
         // Queue up coarse channels to do
         for coarse_chan_idx in coarse_chan_idxs {
             tx_coarse_chan_idx.send(coarse_chan_idx).unwrap();
@@ -119,9 +129,8 @@ pub fn context_to_baseline_imgsets(
                         let img_buf = context
                             .read_by_baseline(timestep_idx, coarse_chan_idx)
                             .unwrap();
-                        tx_img_worker
-                            .send((coarse_chan_idx, timestep_idx, img_buf))
-                            .unwrap();
+                        let msg = (coarse_chan_idx, timestep_idx, img_buf);
+                        tx_img_worker.send(msg).unwrap();
                     }
                     trace!(
                         "[worker {:?}] end coarse channel {}.",
@@ -136,37 +145,37 @@ pub fn context_to_baseline_imgsets(
         drop(tx_coarse_chan_idx);
         drop(tx_img);
 
-        scope.spawn(|_| {
-            multi_progress.join().unwrap();
-        });
-
         // consume rx_img
         for (coarse_chan_idx, timestep_idx, img_buf) in rx_img.iter() {
-            // trace!(
-            //     "consuming coarse_chan {} timestep {}",
-            //     coarse_chan_idx,
-            //     timestep_idx
-            // );
+            trace!(
+                "consuming coarse_chan {} timestep {}",
+                coarse_chan_idx,
+                timestep_idx
+            );
             for (baseline_idx, baseline_chunk) in img_buf.chunks(floats_per_baseline).enumerate() {
-                for (fine_chan_idx, fine_chan_chunk) in
-                    baseline_chunk.chunks(floats_per_finechan).enumerate()
-                {
-                    let x = timestep_idx;
-                    let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
+                let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
 
-                    let imgset = baseline_imgsets.get_mut(&baseline_idx).unwrap();
-                    for (float_idx, float_val) in fine_chan_chunk.iter().enumerate() {
-                        imgset.pin_mut().ImageBufferMut(float_idx)[y * img_stride + x] = *float_val
+                for float_idx in 0..8 {
+                    let imgset_buf = imgset.pin_mut().ImageBufferMut(float_idx);
+                    for (fine_chan_idx, fine_chan_chunk) in
+                        baseline_chunk.chunks(floats_per_finechan).enumerate()
+                    {
+                        let x = timestep_idx;
+                        let y = fine_chans_per_coarse * coarse_chan_idx + fine_chan_idx;
+                        imgset_buf[y * img_stride + x] = fine_chan_chunk[float_idx];
                     }
                 }
             }
-            chan_progress[&coarse_chan_idx].inc(1);
+            let chan_pb = &chan_progress[&coarse_chan_idx];
+            chan_pb.inc(1);
+            if chan_pb.position() >= chan_pb.length() {
+                chan_pb.finish_and_clear();
+            }
             total_progress.inc(1);
-        };
+        }
 
-        chan_progress.iter().for_each(|(_, pb)| pb.finish_with_message("done"));
-        total_progress.finish_with_message("done");
-
+        chan_progress.iter().for_each(|(_, pb)| pb.finish());
+        total_progress.finish();
     })
     .unwrap();
 
@@ -174,7 +183,7 @@ pub fn context_to_baseline_imgsets(
     //     return Err(err_msg);
     // }
 
-    trace!("end context_to_baseline_imgsets");
+    info!("end context_to_baseline_imgsets");
     return baseline_imgsets;
 }
 
@@ -183,17 +192,24 @@ pub fn flag_imgsets(
     strategy_filename: &String,
     baseline_imgsets: BTreeMap<usize, UniquePtr<CxxImageSet>>,
 ) -> BTreeMap<usize, UniquePtr<CxxFlagMask>> {
-    trace!("start flag_imgsets");
+    info!("start flag_imgsets");
+    let flag_progress = ProgressBar::new(baseline_imgsets.len() as u64);
+    flag_progress.set_style(
+        ProgressStyle::default_bar()
+            .template("{msg:16}: [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+            .progress_chars("#>-"),
+    );
+    flag_progress.set_message("flagging b.lines");
     let baseline_flagmasks = baseline_imgsets
         .into_par_iter()
         .map(|(baseline, imgset)| {
-            (
-                baseline,
-                aoflagger.LoadStrategyFile(strategy_filename).Run(&imgset),
-            )
+            let flagmask = aoflagger.LoadStrategyFile(strategy_filename).Run(&imgset);
+            flag_progress.inc(1);
+            (baseline, flagmask)
         })
         .collect();
-    trace!("end flag_imgsets");
+    flag_progress.finish();
+    info!("end flag_imgsets");
     return baseline_flagmasks;
 }
 
@@ -203,12 +219,12 @@ pub fn write_flags(
     filename_template: &str,
     gpubox_ids: &Vec<usize>,
 ) {
-    trace!("start write_flags");
+    info!("start write_flags");
     let mut flag_file_set = FlagFileSet::new(context, filename_template, &gpubox_ids).unwrap();
     flag_file_set
         .write_baseline_flagmasks(&context, baseline_flagmasks)
         .unwrap();
-    trace!("end write_flags");
+    info!("end write_flags");
 }
 
 #[cfg(test)]
