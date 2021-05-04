@@ -84,7 +84,7 @@ pub fn context_to_baseline_imgsets(
             pb.set_style(
                 ProgressStyle::default_bar()
                     .template("{msg:16}: [{wide_bar}] {pos:3}/{len:3}")
-                    .progress_chars("#>-"),
+                    .progress_chars("=> "),
             );
             pb.set_position(0);
             pb.set_message(format!("coarse chan {:3}", coarse_chan_idx));
@@ -97,7 +97,7 @@ pub fn context_to_baseline_imgsets(
     total_progress.set_style(
         ProgressStyle::default_bar()
             .template("{msg:16}: [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
-            .progress_chars("#>-"),
+            .progress_chars("=> "),
     );
     total_progress.set_position(0);
     total_progress.set_message("loading hdus");
@@ -197,7 +197,7 @@ pub fn flag_imgsets(
     flag_progress.set_style(
         ProgressStyle::default_bar()
             .template("{msg:16}: [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
-            .progress_chars("#>-"),
+            .progress_chars("=> "),
     );
     flag_progress.set_message("flagging b.lines");
     let baseline_flagmasks = baseline_imgsets
