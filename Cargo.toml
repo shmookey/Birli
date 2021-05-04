@@ -47,3 +47,6 @@ cxx-build = "1.0.32"
 [[bench]]
 name = "bench"
 harness = false
+
+[profile.bench]
+opt-level = 3
