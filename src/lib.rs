@@ -360,65 +360,39 @@ pub fn context_to_baseline_imgsets(
 
 const SPEED_OF_LIGHT_IN_VACUUM: f64 = 299792458.0; // speed of light in m/s
 
-// void Cotter::correctCableLength(ImageSet& imageSet, size_t polarization, double cableDelay) const
-// {
-// 	float *reals = imageSet.ImageBuffer(polarization*2);
-// 	float *imags = imageSet.ImageBuffer(polarization*2+1);
-
-// 	for(size_t y=0; y!=imageSet.Height(); ++y)
-// 	{
-// 		double angle = -2.0 * M_PI * cableDelay * _channelFrequenciesHz[y] / SPEED_OF_LIGHT;
-// 		double rotSinl, rotCosl;
-// 		sincos(angle, &rotSinl, &rotCosl);
-// 		float rotSin = rotSinl, rotCos = rotCosl;
-
-// 		/// @todo This should use actual time step count in window
-// 		float *realPtr = reals + y * imageSet.HorizontalStride();
-// 		float *imagPtr = imags + y * imageSet.HorizontalStride();
-// 		for(size_t x=0; x!=imageSet.Width(); ++x)
-// 		{
-// 			float r = *realPtr;
-// 			*realPtr = rotCos * r - rotSin * (*imagPtr);
-// 			*imagPtr = rotSin * r + rotCos * (*imagPtr);
-// 			++realPtr;
-// 			++imagPtr;
-// 		}
-// 	}
-// }
-
-fn _correct_cable_length_buffers_cotter(
-    freq_hz: &u32,
-    electrical_length_m: &f64,
-    buf_re: &mut [f32],
-    buf_im: &mut [f32],
-) {
-    let angle: f64 = -2.0 * PI * electrical_length_m * (*freq_hz as f64) / SPEED_OF_LIGHT_IN_VACUUM;
-    let (sin_angle_f64, cos_angle_f64) = angle.sin_cos();
-    let (sin_angle, cos_angle) = (sin_angle_f64 as f32, cos_angle_f64 as f32);
-
-    izip!(buf_re.iter_mut(), buf_im.iter_mut()).for_each(|(re, im)| {
-        let vis_re = *re;
-        *re = cos_angle * vis_re - sin_angle * *im;
-        *im = sin_angle * vis_re + cos_angle * *im;
-    })
-}
-
-// fn _correct_cable_length_buffers_precise(
+// fn _correct_cable_length_buffers_cotter(
 //     freq_hz: &u32,
 //     electrical_length_m: &f64,
 //     buf_re: &mut [f32],
 //     buf_im: &mut [f32],
 // ) {
 //     let angle: f64 = -2.0 * PI * electrical_length_m * (*freq_hz as f64) / SPEED_OF_LIGHT_IN_VACUUM;
-//     let (sin_angle, cos_angle) = angle.sin_cos();
+//     let (sin_angle_f64, cos_angle_f64) = angle.sin_cos();
+//     let (sin_angle, cos_angle) = (sin_angle_f64 as f32, cos_angle_f64 as f32);
 
 //     izip!(buf_re.iter_mut(), buf_im.iter_mut()).for_each(|(re, im)| {
-//         let vis_re = *re as f64;
-//         let vis_im = *im as f64;
-//         *re = (cos_angle * vis_re - sin_angle * vis_im) as f32;
-//         *im = (sin_angle * vis_re + cos_angle * vis_im) as f32;
+//         let vis_re = *re;
+//         *re = cos_angle * vis_re - sin_angle * *im;
+//         *im = sin_angle * vis_re + cos_angle * *im;
 //     })
 // }
+
+fn _correct_cable_length_buffers_precise(
+    freq_hz: &u32,
+    electrical_length_m: &f64,
+    buf_re: &mut [f32],
+    buf_im: &mut [f32],
+) {
+    let angle: f64 = -2.0 * PI * electrical_length_m * (*freq_hz as f64) / SPEED_OF_LIGHT_IN_VACUUM;
+    let (sin_angle, cos_angle) = angle.sin_cos();
+
+    izip!(buf_re.iter_mut(), buf_im.iter_mut()).for_each(|(re, im)| {
+        let vis_re = *re as f64;
+        let vis_im = *im as f64;
+        *re = (cos_angle * vis_re - sin_angle * vis_im) as f32;
+        *im = (sin_angle * vis_re + cos_angle * vis_im) as f32;
+    })
+}
 
 /// Perform cable length corrections, given an observation's
 /// [`mwalib::CorrelatorContext`] and a vector of [`CxxImageSet`]s for  each
@@ -506,8 +480,7 @@ pub fn correct_cable_lengths(
                     imgset_buf_im.chunks_mut(imgset_stride)
                 )
                 .for_each(|(freq_hz, imgset_chunk_re, imgset_chunk_im)| {
-                    // _correct_cable_length_buffers_precise(
-                    _correct_cable_length_buffers_cotter(
+                    _correct_cable_length_buffers_precise(
                         freq_hz,
                         electrical_length_m,
                         imgset_chunk_re,
@@ -1006,6 +979,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cable_length_corrections_mwax() {
         let context = get_mwax_context();
         let width = context.num_timesteps;
@@ -1150,6 +1124,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cable_length_corrections_ord() {
         let context = get_mwa_ord_context();
 
