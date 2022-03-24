@@ -662,6 +662,12 @@ impl BirliContext {
                         .help_heading("AOFLAGGER")
                         .required(false)
                 ]);
+            } else {
+                // add the --no-rfi flag anyway, but hidden.
+                app = app.args(&[
+                    arg!(--"no-rfi" "Does nothing without the aoflagger feature")
+                        .hidde()
+                ]);
             }
         };
         let matches = app.try_get_matches_from_mut(args)?;
@@ -1896,15 +1902,367 @@ mod argparse_tests {
     }
 }
 
-/// These are basically integration tests, but if I put them in a separate
-/// module, then I don't get the coverage. :(
-/// All these tests require aoflagger because they either require flagging or
-/// use the --no-rfi option.
-/// TODO: get unit test coverage to the point where this can be moved to a unit
-/// test module.
+// TODO: Put these integration tests in a separate module.
+
+#[cfg(test)]
+mod integration_tests {
+    use std::path::PathBuf;
+
+    use float_cmp::F32Margin;
+    use tempfile::tempdir;
+
+    use crate::{
+        test_common::{compare_ms_with_csv, compare_uvfits_with_csv, get_1254670392_avg_paths},
+        BirliContext,
+    };
+
+
+    #[test]
+    fn compare_cotter_uvfits_nocorrect_norfi_timechunk1() {
+        let tmp_dir = tempdir().unwrap();
+        let uvfits_path = tmp_dir.path().join("1254670392.none.chunked.uvfits");
+        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
+
+        let expected_csv_path =
+            PathBuf::from("tests/data/1254670392_avg/1254670392.cotter.none.uvfits.csv");
+
+        #[rustfmt::skip]
+        let mut args = vec![
+            "birli",
+            "-m", metafits_path,
+            "-u", uvfits_path.to_str().unwrap(),
+            "--no-digital-gains",
+            "--no-draw-progress",
+            "--pfb-gains", "none",
+            "--no-cable-delay",
+            "--no-geometric-delay",
+            "--no-rfi",
+            "--emulate-cotter",
+            "--time-chunk", "1",
+            "--sel-time", "0", "2"
+        ];
+        args.extend_from_slice(&gpufits_paths);
+
+        let birli_ctx = BirliContext::from_args(&args).unwrap();
+
+        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
+        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
+        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
+        assert!(!birli_ctx.prep_ctx.correct_geometry);
+        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
+        assert_eq!(
+            birli_ctx.io_ctx.uvfits_out,
+            Some(uvfits_path.to_str().unwrap().into())
+        );
+        assert_eq!(birli_ctx.num_timesteps_per_chunk, Some(1));
+
+        birli_ctx.run().unwrap();
+
+        compare_uvfits_with_csv(
+            &uvfits_path,
+            expected_csv_path,
+            F32Margin::default(),
+            true,
+            false,
+        );
+    }
+
+        /// Data generated with
+    ///
+    /// ```bash
+    /// cotter \
+    ///  -m tests/data/1254670392_avg/1254670392.fixed.metafits \
+    ///  -o tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.ms \
+    ///  -allowmissing \
+    ///  -edgewidth 0 \
+    ///  -endflag 0 \
+    ///  -initflag 0 \
+    ///  -noantennapruning \
+    ///  -nocablelength \
+    ///  -norfi \
+    ///  -nogeom \
+    ///  -noflagautos \
+    ///  -noflagdcchannels \
+    ///  -nosbgains \
+    ///  -sbpassband tests/data/subband-passband-32ch-unitary.txt \
+    ///  -nostats \
+    ///  -flag-strategy /usr/share/aoflagger/strategies/mwa-default.lua \
+    ///  -full-apply tests/data/1254670392_avg/1254690096.bin \
+    ///  tests/data/1254670392_avg/*gpubox*.fits
+    /// ```
+    ///
+    /// then casa
+    ///
+    /// ```bash
+    /// tb.open('tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.ms')
+    /// exec(open('tests/data/casa_dump_ms.py').read())
+    /// ```
+    #[test]
+    fn compare_cotter_ms_nocorrect_norfi_cal() {
+        let tmp_dir = tempdir().unwrap();
+        let ms_path = tmp_dir.path().join("1254670392.none.norfi.cal.ms");
+        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
+
+        let expected_csv_path =
+            PathBuf::from("tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.ms.csv");
+
+        #[rustfmt::skip]
+        let mut args = vec![
+            "birli",
+            "-m", metafits_path,
+            "-M", ms_path.to_str().unwrap(),
+            "--no-digital-gains",
+            "--no-draw-progress",
+            "--pfb-gains", "none",
+            "--no-cable-delay",
+            "--no-geometric-delay",
+            "--no-rfi",
+            "--emulate-cotter",
+            "--apply-di-cal", "tests/data/1254670392_avg/1254690096.bin",
+        ];
+        args.extend_from_slice(&gpufits_paths);
+
+        let birli_ctx = BirliContext::from_args(&args).unwrap();
+
+        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
+        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
+        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
+        assert!(!birli_ctx.prep_ctx.correct_geometry);
+        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
+        assert_eq!(
+            birli_ctx.io_ctx.ms_out,
+            Some(ms_path.to_str().unwrap().into())
+        );
+
+        birli_ctx.run().unwrap();
+
+        // ignoring weights because Cotter doesn't flag NaNs
+        compare_ms_with_csv(
+            &ms_path,
+            expected_csv_path,
+            F32Margin::default(),
+            true,
+            false,
+        );
+    }
+
+
+    #[test]
+    /// Handle when calibration solution is provided with 24 channels, but a subset of channels are provided
+    fn compare_cotter_ms_none_norfi_cal_partial() {
+        let tmp_dir = tempdir().unwrap();
+        let ms_path = tmp_dir.path().join("1254670392.none.norfi.cal.ms");
+        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
+
+        let expected_csv_path = PathBuf::from(
+            "tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.partial.ms.csv",
+        );
+
+        #[rustfmt::skip]
+        let mut args = vec![
+            "birli",
+            "-m", metafits_path,
+            "-M", ms_path.to_str().unwrap(),
+            "--no-digital-gains",
+            "--no-draw-progress",
+            "--pfb-gains", "none",
+            "--no-cable-delay",
+            "--no-geometric-delay",
+            "--no-rfi",
+            "--emulate-cotter",
+            "--apply-di-cal", "tests/data/1254670392_avg/1254690096.bin",
+        ];
+        args.extend_from_slice(&gpufits_paths[21..]);
+
+        let birli_ctx = BirliContext::from_args(&args).unwrap();
+
+        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
+        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
+        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
+        assert!(!birli_ctx.prep_ctx.correct_geometry);
+        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
+        assert_eq!(
+            birli_ctx.io_ctx.ms_out,
+            Some(ms_path.to_str().unwrap().into())
+        );
+
+        birli_ctx.run().unwrap();
+
+        // ignoring weights because Cotter doesn't flag NaNs
+        compare_ms_with_csv(
+            &ms_path,
+            expected_csv_path,
+            F32Margin::default(),
+            true,
+            false,
+        );
+    }
+
+    /// Data generated with
+    ///
+    /// ```bash
+    /// cotter \
+    ///  -m tests/data/1254670392_avg/1254670392.fixed.metafits \
+    ///  -o tests/data/1254670392_avg/1254670392.cotter.none.norfi.nopfb.ms \
+    ///  -allowmissing \
+    ///  -edgewidth 0 \
+    ///  -endflag 0 \
+    ///  -initflag 0 \
+    ///  -noantennapruning \
+    ///  -nocablelength \
+    ///  -norfi \
+    ///  -nogeom \
+    ///  -noflagautos \
+    ///  -noflagdcchannels \
+    ///  -sbpassband tests/data/subband-passband-32ch-unitary.txt \
+    ///  -nostats \
+    ///  -flag-strategy /usr/share/aoflagger/strategies/mwa-default.lua \
+    ///  tests/data/1254670392_avg/*gpubox*.fits
+    /// ```
+    ///
+    /// then casa
+    ///
+    /// ```bash
+    /// tb.open('tests/data/1254670392_avg/1254670392.cotter.none.norfi.nopfb.ms')
+    /// exec(open('tests/data/casa_dump_ms.py').read())
+    /// ```
+    #[test]
+    fn compare_cotter_ms_none_norfi_nopfb() {
+        let tmp_dir = tempdir().unwrap();
+        let ms_path = tmp_dir.path().join("1254670392.none.norfi.nopfb.ms");
+        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
+
+        let expected_csv_path =
+            PathBuf::from("tests/data/1254670392_avg/1254670392.cotter.none.norfi.nopfb.ms.csv");
+
+        #[rustfmt::skip]
+        let args = vec![
+            "birli",
+            "-m", metafits_path,
+            "-M", ms_path.to_str().unwrap(),
+            "--no-draw-progress",
+            "--pfb-gains", "none",
+            "--no-cable-delay",
+            "--no-geometric-delay",
+            "--no-rfi",
+            "--emulate-cotter",
+            gpufits_paths[23],
+            gpufits_paths[22],
+        ];
+
+        let birli_ctx = BirliContext::from_args(&args).unwrap();
+
+        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
+        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
+        assert!(birli_ctx.prep_ctx.correct_digital_gains);
+        assert!(!birli_ctx.prep_ctx.correct_geometry);
+        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
+        assert_eq!(
+            birli_ctx.io_ctx.ms_out,
+            Some(ms_path.to_str().unwrap().into())
+        );
+
+        let display = format!("{}", &birli_ctx);
+        assert!(display.contains("Will correct digital gains"));
+        assert!(display.contains("Will not flag with aoflagger"));
+
+        birli_ctx.run().unwrap();
+
+        compare_ms_with_csv(
+            &ms_path,
+            expected_csv_path,
+            F32Margin::default().epsilon(7e-5),
+            false,
+            true,
+        );
+    }
+
+    /// Data generated with
+    ///
+    /// ```bash
+    /// cotter \
+    ///  -m tests/data/1254670392_avg/1254670392.fixed.metafits \
+    ///  -o tests/data/1254670392_avg/1254670392.cotter.none.norfi.nodigital.pfb-cotter-40.ms \
+    ///  -allowmissing \
+    ///  -edgewidth 0 \
+    ///  -endflag 0 \
+    ///  -initflag 0 \
+    ///  -noantennapruning \
+    ///  -nocablelength \
+    ///  -norfi \
+    ///  -nogeom \
+    ///  -noflagautos \
+    ///  -noflagdcchannels \
+    ///  -nosbgains \
+    ///  -sbpassband tests/data/subband-passband-32ch-cotter.txt \
+    ///  -nostats \
+    ///  -flag-strategy /usr/share/aoflagger/strategies/mwa-default.lua \
+    ///  tests/data/1254670392_avg/*gpubox*.fits
+    /// ```
+    ///
+    /// then casa
+    ///
+    /// ```bash
+    /// tb.open('tests/data/1254670392_avg/1254670392.cotter.none.norfi.nodigital.pfb-cotter-40.ms')
+    /// exec(open('tests/data/casa_dump_ms.py').read())
+    /// ```
+    #[test]
+    fn compare_cotter_ms_none_norfi_nodigital_pfb_cotter_40() {
+        let tmp_dir = tempdir().unwrap();
+        let ms_path = tmp_dir.path().join("1254670392.none.norfi.nodigital.ms");
+        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
+
+        let expected_csv_path = PathBuf::from(
+            "tests/data/1254670392_avg/1254670392.cotter.none.norfi.nodigital.pfb-cotter-40.ms.csv",
+        );
+
+        #[rustfmt::skip]
+        let args = vec![
+            "birli",
+            "-m", metafits_path,
+            "-M", ms_path.to_str().unwrap(),
+            "--no-draw-progress",
+            "--no-cable-delay",
+            "--no-geometric-delay",
+            "--no-rfi",
+            "--no-digital-gains",
+            "--pfb-gains", "cotter",
+            "--emulate-cotter",
+            gpufits_paths[23],
+            gpufits_paths[22],
+        ];
+
+        let birli_ctx = BirliContext::from_args(&args).unwrap();
+
+        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
+        assert!(matches!(birli_ctx.prep_ctx.passband_gains, Some(_)));
+        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
+        assert!(!birli_ctx.prep_ctx.correct_geometry);
+        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
+        assert_eq!(
+            birli_ctx.io_ctx.ms_out,
+            Some(ms_path.to_str().unwrap().into())
+        );
+
+        let display = format!("{}", &birli_ctx);
+        assert!(display.contains("Will correct coarse pfb passband gains"));
+
+        birli_ctx.run().unwrap();
+
+        compare_ms_with_csv(
+            &ms_path,
+            expected_csv_path,
+            F32Margin::default().epsilon(1e-2),
+            false,
+            true,
+        );
+    }
+}
+
+/// Integration tests which require aoflagger in some way
 #[cfg(test)]
 #[cfg(feature = "aoflagger")]
-mod tests_aoflagger {
+mod integration_tests_aoflagger {
     use std::path::PathBuf;
 
     use float_cmp::F32Margin;
@@ -1962,57 +2320,6 @@ mod tests_aoflagger {
             expected_csv_path,
             F32Margin::default(),
             false,
-            false,
-        );
-    }
-
-    #[test]
-    fn compare_cotter_uvfits_nocorrect_norfi_timechunk1() {
-        let tmp_dir = tempdir().unwrap();
-        let uvfits_path = tmp_dir.path().join("1254670392.none.chunked.uvfits");
-        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
-
-        let expected_csv_path =
-            PathBuf::from("tests/data/1254670392_avg/1254670392.cotter.none.uvfits.csv");
-
-        #[rustfmt::skip]
-        let mut args = vec![
-            "birli",
-            "-m", metafits_path,
-            "-u", uvfits_path.to_str().unwrap(),
-            "--no-digital-gains",
-            "--no-draw-progress",
-            "--pfb-gains", "none",
-            "--no-cable-delay",
-            "--no-geometric-delay",
-            "--no-rfi",
-            "--emulate-cotter",
-            "--time-chunk", "1",
-            "--sel-time", "0", "2"
-        ];
-        args.extend_from_slice(&gpufits_paths);
-
-        let birli_ctx = BirliContext::from_args(&args).unwrap();
-
-        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
-        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
-        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
-        assert!(!birli_ctx.prep_ctx.correct_geometry);
-        assert_eq!(birli_ctx.prep_ctx.aoflagger_strategy, None);
-        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
-        assert_eq!(
-            birli_ctx.io_ctx.uvfits_out,
-            Some(uvfits_path.to_str().unwrap().into())
-        );
-        assert_eq!(birli_ctx.num_timesteps_per_chunk, Some(1));
-
-        birli_ctx.run().unwrap();
-
-        compare_uvfits_with_csv(
-            &uvfits_path,
-            expected_csv_path,
-            F32Margin::default(),
-            true,
             false,
         );
     }
@@ -2217,300 +2524,6 @@ mod tests_aoflagger {
             expected_csv_path,
             F32Margin::default().epsilon(2e-4),
             true,
-            true,
-        );
-    }
-
-    /// Data generated with
-    ///
-    /// ```bash
-    /// cotter \
-    ///  -m tests/data/1254670392_avg/1254670392.fixed.metafits \
-    ///  -o tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.ms \
-    ///  -allowmissing \
-    ///  -edgewidth 0 \
-    ///  -endflag 0 \
-    ///  -initflag 0 \
-    ///  -noantennapruning \
-    ///  -nocablelength \
-    ///  -norfi \
-    ///  -nogeom \
-    ///  -noflagautos \
-    ///  -noflagdcchannels \
-    ///  -nosbgains \
-    ///  -sbpassband tests/data/subband-passband-32ch-unitary.txt \
-    ///  -nostats \
-    ///  -flag-strategy /usr/share/aoflagger/strategies/mwa-default.lua \
-    ///  -full-apply tests/data/1254670392_avg/1254690096.bin \
-    ///  tests/data/1254670392_avg/*gpubox*.fits
-    /// ```
-    ///
-    /// then casa
-    ///
-    /// ```bash
-    /// tb.open('tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.ms')
-    /// exec(open('tests/data/casa_dump_ms.py').read())
-    /// ```
-    #[test]
-    fn compare_cotter_ms_nocorrect_norfi_cal() {
-        let tmp_dir = tempdir().unwrap();
-        let ms_path = tmp_dir.path().join("1254670392.none.norfi.cal.ms");
-        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
-
-        let expected_csv_path =
-            PathBuf::from("tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.ms.csv");
-
-        #[rustfmt::skip]
-        let mut args = vec![
-            "birli",
-            "-m", metafits_path,
-            "-M", ms_path.to_str().unwrap(),
-            "--no-digital-gains",
-            "--no-draw-progress",
-            "--pfb-gains", "none",
-            "--no-cable-delay",
-            "--no-geometric-delay",
-            "--no-rfi",
-            "--emulate-cotter",
-            "--apply-di-cal", "tests/data/1254670392_avg/1254690096.bin",
-        ];
-        args.extend_from_slice(&gpufits_paths);
-
-        let birli_ctx = BirliContext::from_args(&args).unwrap();
-
-        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
-        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
-        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
-        assert!(!birli_ctx.prep_ctx.correct_geometry);
-        assert!(matches!(birli_ctx.prep_ctx.aoflagger_strategy, None));
-        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
-        assert_eq!(
-            birli_ctx.io_ctx.ms_out,
-            Some(ms_path.to_str().unwrap().into())
-        );
-
-        birli_ctx.run().unwrap();
-
-        // ignoring weights because Cotter doesn't flag NaNs
-        compare_ms_with_csv(
-            &ms_path,
-            expected_csv_path,
-            F32Margin::default(),
-            true,
-            false,
-        );
-    }
-
-    #[test]
-    /// Handle when calibration solution is provided with 24 channels, but a subset of channels are provided
-    fn compare_cotter_ms_none_norfi_cal_partial() {
-        let tmp_dir = tempdir().unwrap();
-        let ms_path = tmp_dir.path().join("1254670392.none.norfi.cal.ms");
-        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
-
-        let expected_csv_path = PathBuf::from(
-            "tests/data/1254670392_avg/1254670392.cotter.none.norfi.cal.partial.ms.csv",
-        );
-
-        #[rustfmt::skip]
-        let mut args = vec![
-            "birli",
-            "-m", metafits_path,
-            "-M", ms_path.to_str().unwrap(),
-            "--no-digital-gains",
-            "--no-draw-progress",
-            "--pfb-gains", "none",
-            "--no-cable-delay",
-            "--no-geometric-delay",
-            "--no-rfi",
-            "--emulate-cotter",
-            "--apply-di-cal", "tests/data/1254670392_avg/1254690096.bin",
-        ];
-        args.extend_from_slice(&gpufits_paths[21..]);
-
-        let birli_ctx = BirliContext::from_args(&args).unwrap();
-
-        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
-        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
-        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
-        assert!(!birli_ctx.prep_ctx.correct_geometry);
-        assert!(matches!(birli_ctx.prep_ctx.aoflagger_strategy, None));
-        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
-        assert_eq!(
-            birli_ctx.io_ctx.ms_out,
-            Some(ms_path.to_str().unwrap().into())
-        );
-
-        birli_ctx.run().unwrap();
-
-        // ignoring weights because Cotter doesn't flag NaNs
-        compare_ms_with_csv(
-            &ms_path,
-            expected_csv_path,
-            F32Margin::default(),
-            true,
-            false,
-        );
-    }
-
-    /// Data generated with
-    ///
-    /// ```bash
-    /// cotter \
-    ///  -m tests/data/1254670392_avg/1254670392.fixed.metafits \
-    ///  -o tests/data/1254670392_avg/1254670392.cotter.none.norfi.nopfb.ms \
-    ///  -allowmissing \
-    ///  -edgewidth 0 \
-    ///  -endflag 0 \
-    ///  -initflag 0 \
-    ///  -noantennapruning \
-    ///  -nocablelength \
-    ///  -norfi \
-    ///  -nogeom \
-    ///  -noflagautos \
-    ///  -noflagdcchannels \
-    ///  -sbpassband tests/data/subband-passband-32ch-unitary.txt \
-    ///  -nostats \
-    ///  -flag-strategy /usr/share/aoflagger/strategies/mwa-default.lua \
-    ///  tests/data/1254670392_avg/*gpubox*.fits
-    /// ```
-    ///
-    /// then casa
-    ///
-    /// ```bash
-    /// tb.open('tests/data/1254670392_avg/1254670392.cotter.none.norfi.nopfb.ms')
-    /// exec(open('tests/data/casa_dump_ms.py').read())
-    /// ```
-    #[test]
-    fn compare_cotter_ms_none_norfi_nopfb() {
-        let tmp_dir = tempdir().unwrap();
-        let ms_path = tmp_dir.path().join("1254670392.none.norfi.nopfb.ms");
-        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
-
-        let expected_csv_path =
-            PathBuf::from("tests/data/1254670392_avg/1254670392.cotter.none.norfi.nopfb.ms.csv");
-
-        #[rustfmt::skip]
-        let args = vec![
-            "birli",
-            "-m", metafits_path,
-            "-M", ms_path.to_str().unwrap(),
-            "--no-draw-progress",
-            "--pfb-gains", "none",
-            "--no-cable-delay",
-            "--no-geometric-delay",
-            "--no-rfi",
-            "--emulate-cotter",
-            gpufits_paths[23],
-            gpufits_paths[22],
-        ];
-
-        let birli_ctx = BirliContext::from_args(&args).unwrap();
-
-        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
-        assert_eq!(birli_ctx.prep_ctx.passband_gains, None);
-        assert!(birli_ctx.prep_ctx.correct_digital_gains);
-        assert!(!birli_ctx.prep_ctx.correct_geometry);
-        assert!(matches!(birli_ctx.prep_ctx.aoflagger_strategy, None));
-        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
-        assert_eq!(
-            birli_ctx.io_ctx.ms_out,
-            Some(ms_path.to_str().unwrap().into())
-        );
-
-        let display = format!("{}", &birli_ctx);
-        assert!(display.contains("Will correct digital gains"));
-        assert!(display.contains("Will not flag with aoflagger"));
-
-        birli_ctx.run().unwrap();
-
-        compare_ms_with_csv(
-            &ms_path,
-            expected_csv_path,
-            F32Margin::default().epsilon(7e-5),
-            false,
-            true,
-        );
-    }
-
-    /// Data generated with
-    ///
-    /// ```bash
-    /// cotter \
-    ///  -m tests/data/1254670392_avg/1254670392.fixed.metafits \
-    ///  -o tests/data/1254670392_avg/1254670392.cotter.none.norfi.nodigital.pfb-cotter-40.ms \
-    ///  -allowmissing \
-    ///  -edgewidth 0 \
-    ///  -endflag 0 \
-    ///  -initflag 0 \
-    ///  -noantennapruning \
-    ///  -nocablelength \
-    ///  -norfi \
-    ///  -nogeom \
-    ///  -noflagautos \
-    ///  -noflagdcchannels \
-    ///  -nosbgains \
-    ///  -sbpassband tests/data/subband-passband-32ch-cotter.txt \
-    ///  -nostats \
-    ///  -flag-strategy /usr/share/aoflagger/strategies/mwa-default.lua \
-    ///  tests/data/1254670392_avg/*gpubox*.fits
-    /// ```
-    ///
-    /// then casa
-    ///
-    /// ```bash
-    /// tb.open('tests/data/1254670392_avg/1254670392.cotter.none.norfi.nodigital.pfb-cotter-40.ms')
-    /// exec(open('tests/data/casa_dump_ms.py').read())
-    /// ```
-    #[test]
-    fn compare_cotter_ms_none_norfi_nodigital_pfb_cotter_40() {
-        let tmp_dir = tempdir().unwrap();
-        let ms_path = tmp_dir.path().join("1254670392.none.norfi.nodigital.ms");
-        let (metafits_path, gpufits_paths) = get_1254670392_avg_paths();
-
-        let expected_csv_path = PathBuf::from(
-            "tests/data/1254670392_avg/1254670392.cotter.none.norfi.nodigital.pfb-cotter-40.ms.csv",
-        );
-
-        #[rustfmt::skip]
-        let args = vec![
-            "birli",
-            "-m", metafits_path,
-            "-M", ms_path.to_str().unwrap(),
-            "--no-draw-progress",
-            "--no-cable-delay",
-            "--no-geometric-delay",
-            "--no-rfi",
-            "--no-digital-gains",
-            "--pfb-gains", "cotter",
-            "--emulate-cotter",
-            gpufits_paths[23],
-            gpufits_paths[22],
-        ];
-
-        let birli_ctx = BirliContext::from_args(&args).unwrap();
-
-        assert!(!birli_ctx.prep_ctx.correct_cable_lengths);
-        assert!(matches!(birli_ctx.prep_ctx.passband_gains, Some(_)));
-        assert!(!birli_ctx.prep_ctx.correct_digital_gains);
-        assert!(!birli_ctx.prep_ctx.correct_geometry);
-        assert!(matches!(birli_ctx.prep_ctx.aoflagger_strategy, None));
-        assert_eq!(birli_ctx.io_ctx.metafits_in, metafits_path.to_string());
-        assert_eq!(
-            birli_ctx.io_ctx.ms_out,
-            Some(ms_path.to_str().unwrap().into())
-        );
-
-        let display = format!("{}", &birli_ctx);
-        assert!(display.contains("Will correct coarse pfb passband gains"));
-
-        birli_ctx.run().unwrap();
-
-        compare_ms_with_csv(
-            &ms_path,
-            expected_csv_path,
-            F32Margin::default().epsilon(1e-2),
-            false,
             true,
         );
     }
