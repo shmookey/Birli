@@ -149,7 +149,7 @@ impl Display for BirliContext {
         // TODO: actually display this.
         let _fine_chan_flag_idxs: Vec<usize> = self
             .flag_ctx
-            .fine_chan_flags
+            .fine_chan_flags_per_coarse
             .iter()
             .enumerate()
             .filter_map(|(idx, &flag)| if flag { Some(idx) } else { None })
@@ -782,7 +782,7 @@ impl BirliContext {
                             ),
                         }));
                     }
-                    flag_ctx.fine_chan_flags[fine_chan_idx] = true;
+                    flag_ctx.fine_chan_flags_per_coarse[fine_chan_idx] = true;
                 }
             }
             Err(err) => match err.kind() {
@@ -1651,8 +1651,8 @@ mod argparse_tests {
 
         let BirliContext { flag_ctx, .. } = BirliContext::from_args(&args).unwrap();
 
-        assert!(flag_ctx.fine_chan_flags[2]);
-        assert!(!flag_ctx.fine_chan_flags[1]);
+        assert!(flag_ctx.fine_chan_flags_per_coarse[2]);
+        assert!(!flag_ctx.fine_chan_flags_per_coarse[1]);
     }
 
     #[test]

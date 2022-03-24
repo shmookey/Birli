@@ -33,7 +33,9 @@ pub struct FlagContext {
     /// Which mwalib coarse channel indices are flagged
     pub coarse_chan_flags: Vec<bool>,
     /// Which fine channel indices are flagged in every coarse channel
-    pub fine_chan_flags: Vec<bool>,
+    pub fine_chan_flags_per_coarse: Vec<bool>,
+    /// Which fine channels are flagged
+    pub chan_flags: Vec<bool>,
     /// Which mwalib antenna indices are flagged
     pub antenna_flags: Vec<bool>,
     /// Whether auto-correlations are flagged
@@ -52,7 +54,8 @@ impl FlagContext {
         Self {
             timestep_flags: vec![false; num_timesteps],
             coarse_chan_flags: vec![false; num_coarse_chans],
-            fine_chan_flags: vec![false; num_fine_chans_per_coarse],
+            fine_chan_flags_per_coarse: vec![false; num_fine_chans_per_coarse],
+            chan_flags: vec![false; num_fine_chans_per_coarse * num_coarse_chans],
             antenna_flags: vec![false; num_ants],
             ..Self::default()
         }
@@ -147,16 +150,22 @@ impl FlagContext {
         let coarse_chan_flags = &self.coarse_chan_flags[coarse_chan_range.clone()];
         let baseline_flags = self.get_baseline_flags(ant_pairs);
 
-        let chan_flags: Vec<_> = coarse_chan_flags
+        let num_fine_chans_per_coarse = self.fine_chan_flags_per_coarse.len();
+        let first_chan_idx = coarse_chan_range.start * num_fine_chans_per_coarse;
+        let last_chan_idx = coarse_chan_range.end * num_fine_chans_per_coarse;
+        let chan_flags: Vec<_> = izip!(
+            coarse_chan_flags
             .iter()
             .flat_map(|coarse_chan_flag| {
                 if *coarse_chan_flag {
-                    vec![true; self.fine_chan_flags.len()]
+                    vec![true; self.fine_chan_flags_per_coarse.len()]
                 } else {
-                    self.fine_chan_flags.clone()
+                    self.fine_chan_flags_per_coarse.clone()
                 }
-            })
-            .collect();
+            }),
+            &self.chan_flags[first_chan_idx..last_chan_idx]
+        ).map(|(f1, &f2)| f1 && f2).collect();
+
         let shape = (timestep_range.len(), chan_flags.len(), ant_pairs.len());
 
         let flag_shape = flag_array.dim();
