@@ -14,6 +14,7 @@ use cfg_if::cfg_if;
 use derive_builder::Builder;
 use itertools::izip;
 use log::trace;
+use marlu::io::error::BadArrayShape;
 
 cfg_if! {
     if #[cfg(feature = "aoflagger")] {
@@ -161,12 +162,12 @@ impl FlagContext {
 
         let flag_shape = flag_array.dim();
         if flag_shape.0 > shape.0 || flag_shape.1 > shape.1 || flag_shape.2 > shape.2 {
-            return Err(BirliError::BadArrayShape {
+            return Err(BirliError::BadArrayShape(BadArrayShape {
                 argument: "flag_array".to_string(),
                 function: "FlagContext::set_flags".to_string(),
                 expected: format!("dims less than {:?}", shape),
                 received: format!("{:?}", flag_shape),
-            });
+            }));
         };
 
         flag_array
